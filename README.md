@@ -47,6 +47,9 @@ npm run dev                           # http://localhost:5173, proxies /api to :
 ```
 
 Sign in as Alice/Bob/Charlie, then **New document**. Save with the button or Ctrl/Cmd+S.
+Saving is manual: **autosave is not available yet** (planned for a future release, see
+[#27](https://github.com/solaranoir/docs_dup_exercise/issues/27)). The status indicator shows
+unsaved changes, and the app warns before you leave with unsaved edits.
 
 Demo login: `POST /api/demo/login {"login_key": "alice"}` sets an httpOnly signed session
 cookie and also returns a bearer token (for API tests). `GET /api/me` returns the principal.
@@ -91,3 +94,12 @@ Free plan caveats: the web service sleeps when idle; free PostgreSQL expires aft
 
 No real-time collaboration, comments, version history, public links, email invites, SSO, or
 offline sync. Demo identities must be replaced with real auth before public release.
+
+Planned for future releases (post-MVP, not available yet):
+
+- **Autosave** — the MVP uses explicit Save (button or Ctrl/Cmd+S) with an unsaved-changes
+  indicator and leave-page warnings. Autosave will be considered in a future release
+  ([#27](https://github.com/solaranoir/docs_dup_exercise/issues/27)).
+- **More text sizes** — the editor offers four fixed sizes (Small, Normal, Large, Extra large);
+  additional fixed sizes are tracked in
+  [#26](https://github.com/solaranoir/docs_dup_exercise/issues/26).
