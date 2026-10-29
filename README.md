@@ -8,7 +8,7 @@ Status: **Week 4 — Hardening + release** (rate limits, JSON logs, security hea
 verification, runbook, ADRs). Live demo: https://docworkspace-web.onrender.com
 Plan and task tracking: [docs/PLAN.md](docs/PLAN.md) and the GitHub issues. Operations:
 [docs/RUNBOOK.md](docs/RUNBOOK.md). Release gate: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
-Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-008).
+Architecture overview: [ARCHITECTURE.md](ARCHITECTURE.md). Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-008).
 
 ## Layout
 
