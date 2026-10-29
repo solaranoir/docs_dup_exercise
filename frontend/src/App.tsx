@@ -34,7 +34,7 @@ export function App() {
     <>
       <header className="app-header">
         <a href="#/" className="brand" onClick={(e) => (e.preventDefault(), navigate("#/"))}>
-          Document Workspace
+          Solara Docs
         </a>
         <span className="whoami">
           Signed in as <strong>{user.display_name}</strong>

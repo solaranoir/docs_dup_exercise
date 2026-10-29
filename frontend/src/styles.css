@@ -117,3 +117,111 @@ button:disabled { opacity: 0.6; cursor: default; }
 .share-list { list-style: none; padding: 0; display: grid; gap: 8px; }
 .share-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .share-list li span:first-child { flex: 1 1 auto; }
+
+/* Solara Noir visual system: cosmic ink, aurora teal, warm starlight. */
+:root {
+  --bg: #090f1d; --surface: #121e30; --surface-raised: #19283b;
+  --text: #f0f3f8; --muted: #a6b7c8; --border: #33465c;
+  --accent: #65dfd2; --accent-text: #071b23; --ok: #7de4ae;
+  --warn: #f3c47b; --danger: #ff8d9f; --focus: #85f1df;
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #090f1d; --surface: #121e30; --text: #f0f3f8;
+    --muted: #a6b7c8; --border: #33465c; --accent: #65dfd2;
+    --accent-text: #071b23; --ok: #7de4ae; --warn: #f3c47b;
+    --danger: #ff8d9f; --focus: #85f1df; }
+}
+body {
+  min-height: 100vh;
+  background: radial-gradient(ellipse 75% 42% at 85% -8%, #24546b6b, transparent 75%),
+              radial-gradient(ellipse 48% 35% at -10% 55%, #432e6355, transparent 80%),
+              #090f1d;
+  background-attachment: fixed;
+}
+body::before { content: ""; pointer-events: none; position: fixed; inset: 0; opacity: .18;
+  background-image: radial-gradient(#c5f8f2 0.7px, transparent 0.9px);
+  background-size: 58px 58px; mask-image: linear-gradient(to bottom, #000, transparent 80%); z-index: -1; }
+main { max-width: 1080px; padding: 42px 24px 90px; }
+a { color: #8de8df; text-underline-offset: 3px; }
+a:hover { color: #c0fff4; }
+h1, h2, h3 { letter-spacing: -.035em; }
+h1 { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1.12; }
+h2 { font-size: 1.25rem; }
+.app-header { min-height: 76px; padding: 16px clamp(20px, 4vw, 64px);
+  background: #0b1524ee; border-bottom: 1px solid #375365; backdrop-filter: blur(18px); }
+.brand { display: inline-flex; align-items: center; gap: 12px; font-size: 1.05rem;
+  font-weight: 800; letter-spacing: .045em; text-transform: uppercase; }
+.brand::before { content: "✦"; color: #7ee4d7; font-size: 1.8rem; text-shadow: 0 0 18px #60c8d3; }
+.brand::after { content: " / WORKSPACE"; font-size: .66rem; letter-spacing: .16em;
+  color: #a3b5c6; font-weight: 600; }
+.whoami { font-size: .9rem; }
+.whoami strong { color: #e6f9f4; }
+button, select, .button-like { background: #192a3e; border: 1px solid #456079;
+  border-radius: 10px; color: var(--text); padding: 10px 14px;
+  transition: background .15s, border-color .15s, transform .15s, box-shadow .15s; }
+button:hover:not(:disabled), .button-like:hover { background: #263d51; border-color: #75d6d0; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button.primary { background: linear-gradient(120deg, #77e4d3, #73b9df); border-color: #7ae4d8;
+  color: #09212a; font-weight: 750; box-shadow: 0 4px 22px #56d7ca25; }
+button.primary:hover:not(:disabled) { background: linear-gradient(120deg, #a3f6e6, #92d0f1); }
+.documents-head, .editor-head { margin-bottom: 28px; }
+.documents-head h1 { margin: 0; }
+.documents section { margin: 32px 0; }
+.documents section > h2 { color: #d6f3ef; margin-bottom: 14px; }
+.doc-list { background: #111e30e8; border: 1px solid #354e65; border-radius: 16px;
+  overflow: hidden; box-shadow: 0 15px 48px #0003; }
+.doc-list li { padding: 18px 22px; border-color: #30465a; }
+.doc-list li:hover { background: #203149; }
+.doc-list a { color: #e5f9f7; font-weight: 650; text-decoration: none; }
+.doc-list a:hover { color: #79e4d8; }
+.badge { color: #b8d9e2; background: #21394b; border: 1px solid #476578;
+  font-weight: 600; padding: 5px 11px; }
+.badge-viewer { color: #c6e7fc; background: #1e3655; border-color: #486e95; }
+.empty { border: 1px dashed #456074; border-radius: 14px; padding: 24px;
+  background: #14243a88; }
+.editor-head { padding: 14px 0; border-bottom: 1px solid #34485c; }
+.title-input { color: #f3f7ff; font-size: clamp(1.8rem, 4vw, 2.7rem);
+  font-weight: 750; letter-spacing: -.04em; padding: 12px 14px; }
+.title-input:focus { background: #14243a; }
+.toolbar { background: #192a3e; border-color: #456078; border-radius: 14px 14px 0 0;
+  padding: 10px; gap: 8px; }
+.toolbar button { padding: 7px 11px; }
+.toolbar button[aria-pressed="true"] { box-shadow: 0 0 0 1px #8bf2e5 inset; }
+.editor { background: #f9fbff; color: #192a39; border: 1px solid #4c667b;
+  border-radius: 0 0 14px 14px; box-shadow: 0 18px 65px #0004; }
+.editor-body { min-height: 47vh; padding: clamp(22px, 5vw, 56px);
+  font-family: Georgia, Cambria, serif; line-height: 1.75; font-size: 1.08rem; }
+.editor-body h1, .editor-body h2, .editor-body h3 { line-height: 1.3; }
+.editor-body p { margin: .7em 0; }
+.editor-body ul, .editor-body ol { padding-left: 1.8em; }
+.modal { background: #142238; border-color: #5a778d; border-radius: 18px;
+  box-shadow: 0 28px 100px #0009; padding: 24px 28px; }
+.modal::backdrop { background: #030914c9; backdrop-filter: blur(5px); }
+.field input:not([type="radio"]):not([type="file"]) { background: #0e1b2d;
+  border-color: #4b667a; border-radius: 9px; padding: 11px 12px; }
+.notice { background: #402a3b; border-radius: 12px; }
+.notice-warn { background: #3c3024; }
+.attachments { background: #132239d9; border: 1px solid #355068;
+  border-radius: 16px; padding: 20px 24px; }
+.login { max-width: 520px; margin: 8vh auto 0; background: #142238e8;
+  border: 1px solid #3c5e74; padding: 34px; border-radius: 20px;
+  box-shadow: 0 24px 80px #0006; }
+.login h1::before { content: "✦ "; color: #7de6d9; }
+.login-users button { background: #20364c; padding: 16px 18px; font-weight: 650; }
+.login-users button:hover { background: #2b5060; }
+.loading { padding: 22px; }
+@media (max-width: 680px) {
+  main { padding: 24px 14px 64px; }
+  .app-header { padding: 14px 16px; }
+  .brand::after { display: none; }
+  .whoami { width: 100%; justify-content: space-between; }
+  .documents-head, .editor-head { align-items: stretch; }
+  .actions { width: 100%; }
+  .doc-list li { align-items: flex-start; }
+  .doc-list time { width: 100%; }
+  .toolbar { gap: 5px; }
+  .login { margin: 4vh 8px; padding: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { button, select, .button-like { transition: none; } }

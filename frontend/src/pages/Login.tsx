@@ -11,7 +11,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   return (
     <main className="login">
-      <h1>Document Workspace</h1>
+      <h1>Solara Docs</h1>
       <p>Demo sign-in — choose a seeded identity.</p>
       {error && <p role="alert">{error}</p>}
       <ul className="login-users">
