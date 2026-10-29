@@ -13,6 +13,9 @@ const storageEnv = {
   STORAGE_SECRET_KEY: "test",
   STORAGE_REGION: "us-east-1",
   STORAGE_AUTO_CREATE_BUCKET: "true",
+  // The suite logs in far more than a person would; production limits are tested in pytest.
+  LOGIN_RATE_LIMIT_PER_MINUTE: "1000",
+  UPLOAD_RATE_LIMIT_PER_MINUTE: "1000",
 };
 
 export default defineConfig({

@@ -4,7 +4,8 @@ from fastapi.testclient import TestClient
 def test_live(client: TestClient) -> None:
     r = client.get("/health/live")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    assert r.json()["status"] == "ok"
+    assert "commit" in r.json()
     assert r.headers["X-Request-ID"]
 
 

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     storage_region: str = "auto"
     # Local/CI only (moto, MinIO): create the bucket on first use. Never needed on R2/S3.
     storage_auto_create_bucket: bool = False
+
+    # Render sets RENDER_GIT_COMMIT; exposed by /health/live so deploys can be verified.
+    git_commit: str | None = Field(
+        default=None, validation_alias=AliasChoices("GIT_COMMIT", "RENDER_GIT_COMMIT")
+    )
+    log_level: str = "INFO"
+
+    login_rate_limit_per_minute: int = 20
+    upload_rate_limit_per_minute: int = 30
 
     max_upload_bytes: int = 10 * 1024 * 1024
     max_attachments_per_document: int = 10

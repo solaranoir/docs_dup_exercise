@@ -9,6 +9,7 @@ from app.auth import SESSION_COOKIE, CurrentUser, issue_token, set_session_cooki
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import User
+from app.ratelimit import limit_login
 
 router = APIRouter(prefix="/api", tags=["demo-auth"])
 
@@ -37,7 +38,7 @@ def list_demo_users(db: Annotated[Session, Depends(get_db)]) -> list[UserOut]:
     return [_out(u) for u in db.scalars(select(User).order_by(User.id))]
 
 
-@router.post("/demo/login")
+@router.post("/demo/login", dependencies=[Depends(limit_login)])
 def demo_login(
     body: LoginIn,
     response: Response,

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import get_db
 from app.main import create_app
+from app.ratelimit import reset_limits
 from app.seed import seed_demo_users
 from app.storage import MemoryStorage, get_storage, optional_storage
 
@@ -51,6 +52,13 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
     with engine.begin() as conn:
         for table in ("attachments", "document_grants", "documents", "users"):
             conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits() -> Iterator[None]:
+    reset_limits()
+    yield
+    reset_limits()
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -7,14 +8,16 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.observability import configure_logging, request_id_var
 from app.routes import attachments, demo, documents, grants, health, imports
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 access_log = logging.getLogger("app.access")
+_SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings.log_level)
     app = FastAPI(title="Document Workspace API", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -28,17 +31,30 @@ def create_app() -> FastAPI:
     async def request_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        rid = request.headers.get("x-request-id") or uuid.uuid4().hex
+        incoming = request.headers.get("x-request-id", "")
+        # Accept a caller's id only if it is short and safe to echo into logs and headers.
+        rid = incoming if _SAFE_ID.fullmatch(incoming) else uuid.uuid4().hex
+        token = request_id_var.set(rid)
         start = time.perf_counter()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
         response.headers["X-Request-ID"] = rid
-        access_log.info(
-            "rid=%s method=%s path=%s status=%s ms=%.1f",
-            rid,
-            request.method,
-            request.url.path,
-            response.status_code,
-            (time.perf_counter() - start) * 1000,
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        level = logging.WARNING if response.status_code >= 500 else logging.INFO
+        access_log.log(
+            level,
+            "request",
+            extra={
+                "request_id": rid,
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+            },
         )
         return response
 

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.db import get_db
 from app.storage import Storage, StorageError, optional_storage
 
@@ -15,8 +16,8 @@ log = logging.getLogger(__name__)
 
 
 @router.get("/live")
-def live() -> dict[str, str]:
-    return {"status": "ok"}
+def live(settings: Annotated[Settings, Depends(get_settings)]) -> dict[str, str | None]:
+    return {"status": "ok", "commit": settings.git_commit}
 
 
 @router.get("/ready")

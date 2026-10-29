@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { api, ApiError, type User } from "./api";
 import { DocumentList } from "./pages/DocumentList";
-import { EditorPage } from "./pages/EditorPage";
 import { Login } from "./pages/Login";
 import { navigate, useRoute } from "./router";
+
+// Tiptap/ProseMirror is most of the bundle; load it only when a document is opened.
+const EditorPage = lazy(() => import("./pages/EditorPage").then((m) => ({ default: m.EditorPage })));
 
 export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -42,7 +44,9 @@ export function App() {
         </span>
       </header>
       <main>
-        {route.name === "doc" ? <EditorPage key={route.id} id={route.id} /> : <DocumentList />}
+        <Suspense fallback={<p className="loading">Loading editor…</p>}>
+          {route.name === "doc" ? <EditorPage key={route.id} id={route.id} /> : <DocumentList />}
+        </Suspense>
       </main>
     </>
   );

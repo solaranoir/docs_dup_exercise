@@ -49,14 +49,32 @@ class S3Storage:
             ),
         )
         self._ensured = not auto_create
+        # Readiness probes must answer fast: short timeouts and no retries.
+        self.probe = boto3.client(
+            "s3",
+            endpoint_url=endpoint or None,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+                retries={"max_attempts": 1, "mode": "standard"},
+                connect_timeout=2,
+                read_timeout=3,
+            ),
+        )
 
-    def _call(self, fn: Callable[..., Any], **kwargs: Any) -> Any:
+    def _ensure_bucket(self) -> None:
         if not self._ensured:
             try:
                 self.client.head_bucket(Bucket=self.bucket)
             except ClientError:
                 self.client.create_bucket(Bucket=self.bucket)
             self._ensured = True
+
+    def _call(self, fn: Callable[..., Any], **kwargs: Any) -> Any:
+        self._ensure_bucket()
         try:
             return fn(Bucket=self.bucket, **kwargs)
         except (BotoCoreError, ClientError) as exc:
@@ -74,7 +92,11 @@ class S3Storage:
         self._call(self.client.delete_object, Key=key)
 
     def check(self) -> None:
-        self._call(self.client.head_bucket)
+        try:
+            self._ensure_bucket()
+            self.probe.head_bucket(Bucket=self.bucket)
+        except (BotoCoreError, ClientError) as exc:
+            raise StorageError(type(exc).__name__) from exc
 
 
 class MemoryStorage:
