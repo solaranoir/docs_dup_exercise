@@ -11,13 +11,15 @@ services:
     runtime: python
     plan: free # sleeps when idle; first request after sleep is slow
     rootDir: backend
-    buildCommand: pip install -r requirements.lock && pip install -e . --no-deps
+    # Non-editable install: an editable install once kept serving stale code after a
+    # "successful" deploy (#30). /health/live reports the served commit.
+    buildCommand: pip install -r requirements.lock && pip install --no-deps .
     # Migrations and the idempotent demo seed run before the server binds. Free plans do not
     # support preDeployCommand; move both there on a paid plan.
     startCommand: >-
       alembic upgrade head &&
       python scripts/seed_demo.py &&
-      uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
     healthCheckPath: /health/ready
     envVars:
       - key: PYTHON_VERSION
@@ -63,6 +65,13 @@ services:
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      # Tiptap renders font sizes as inline style attributes, hence style-src 'unsafe-inline'.
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     envVars:
       - key: NODE_VERSION
         value: "22"

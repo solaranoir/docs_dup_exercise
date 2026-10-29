@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { api, type DocumentSummary } from "../api";
-import { ImportDialog } from "../components/ImportDialog";
 import { navigate } from "../router";
+
+const ImportDialog = lazy(() =>
+  import("../components/ImportDialog").then((m) => ({ default: m.ImportDialog })),
+);
 
 function Section({ title, docs, empty }: { title: string; docs: DocumentSummary[]; empty: string }) {
   // aria-labelledby takes a space-separated id list, so the id must not contain spaces.
@@ -60,11 +63,15 @@ export function DocumentList() {
           </button>
         </div>
       </div>
-      <ImportDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        target={{ kind: "new", onCreated: (doc) => navigate(`#/doc/${doc.id}`) }}
-      />
+      {importOpen && (
+        <Suspense fallback={<p className="loading">Loading…</p>}>
+          <ImportDialog
+            open={importOpen}
+            onClose={() => setImportOpen(false)}
+            target={{ kind: "new", onCreated: (doc) => navigate(`#/doc/${doc.id}`) }}
+          />
+        </Suspense>
+      )}
       <Section
         title="Owned by me"
         docs={docs.filter((d) => d.permission === "owner")}

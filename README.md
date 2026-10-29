@@ -4,16 +4,20 @@ Single-user editing + explicit-user sharing workspace: React/Tiptap frontend, Fa
 PostgreSQL persistence, S3-compatible attachment storage. Demo-quality release with seeded
 identities (Alice, Bob, Charlie) — **not secure for public internet use** (see ADR-004).
 
-Status: **Week 3 — Imports + sharing** (.txt/.md/.docx import, attachments, view-only sharing).
-Plan and task tracking: [docs/PLAN.md](docs/PLAN.md) and the GitHub issues.
+Status: **Week 4 — Hardening + release** (rate limits, JSON logs, security headers, deploy
+verification, runbook, ADRs). Live demo: https://docworkspace-web.onrender.com
+Plan and task tracking: [docs/PLAN.md](docs/PLAN.md) and the GitHub issues. Operations:
+[docs/RUNBOOK.md](docs/RUNBOOK.md). Release gate: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-008).
 
 ## Layout
 
 ```
 backend/        FastAPI app (app/), Alembic migrations, tests, scripts/seed_demo.py
 frontend/       React + Tiptap (Week 2)
-e2e/            Playwright suites (Week 2–4)
-docs/           Plan, ADRs
+e2e/            Playwright suites (critical journeys)
+docs/           Plan, runbook, release checklist, ADRs
+scripts/        smoke_deployed.sh (post-deploy verification)
 render.yaml     Render Blueprint
 ```
 
@@ -88,6 +92,9 @@ file so the suite runs without a server. CI on every PR runs everything against 
 | `STORAGE_REGION` | `auto` for R2 |
 | `STORAGE_AUTO_CREATE_BUCKET` | Local/CI only; creates the bucket on first use |
 | `MAX_UPLOAD_BYTES` / `MAX_ATTACHMENTS_PER_DOCUMENT` | Defaults 10 MB / 10 |
+| `LOGIN_RATE_LIMIT_PER_MINUTE` / `UPLOAD_RATE_LIMIT_PER_MINUTE` | Defaults 20 per IP / 30 per user |
+| `LOG_LEVEL` | Default `INFO`; logs are JSON lines with `request_id` |
+| `RENDER_GIT_COMMIT` | Set by Render; reported by `/health/live` |
 | `VITE_API_BASE_URL` | Optional API origin; empty = same origin (`/api` proxied/rewritten) |
 
 ## Deploy (Render)
@@ -99,7 +106,8 @@ file so the suite runs without a server. CI on every PR runs everything against 
    `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` on
    **docworkspace-api** only (never on the static site).
 3. Start command runs `alembic upgrade head` and the idempotent seed, then uvicorn on `$PORT`.
-4. Verify `https://<api>.onrender.com/health/ready` returns `"database":"ok"` and `"storage":"ok"`.
+4. Verify `https://<api>.onrender.com/health/ready` returns `"database":"ok"` and `"storage":"ok"`,
+   then run `scripts/smoke_deployed.sh "" "" <commit>` (see [docs/RUNBOOK.md](docs/RUNBOOK.md)).
 
 Free plan caveats: the web service sleeps when idle; free PostgreSQL expires after 30 days.
 
@@ -112,7 +120,9 @@ Import is best-effort: `.txt` → paragraphs; `.md` → headings (H4+ become H3)
 lists; links, images, code blocks, quotes and HTML are flattened or removed; `.docx` →
 headings, bold/italic/underline, bulleted/numbered lists; tables, images, tracked changes,
 fonts, colours and section layout are lost. The preview lists every such loss before saving.
-Sharing is view-only with seeded accounts; attachments have no virus scanning.
+Sharing is view-only with seeded accounts; attachments have **no virus scanning** yet
+([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)). Rate limits are in-process
+(single instance); counters reset on restart.
 
 Planned for future releases (post-MVP, not available yet):
 
@@ -122,3 +132,7 @@ Planned for future releases (post-MVP, not available yet):
 - **More text sizes** — the editor offers four fixed sizes (Small, Normal, Large, Extra large);
   additional fixed sizes are tracked in
   [#26](https://github.com/solaranoir/docs_dup_exercise/issues/26).
+- **Virus/malware scanning** for attachments and imports
+  ([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)).
+- **Real authentication, invitations, editor grants, version history**
+  ([#22](https://github.com/solaranoir/docs_dup_exercise/issues/22)).

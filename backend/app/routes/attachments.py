@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from app.auth import CurrentUser
 from app.config import Settings, get_settings
 from app.models import Attachment
+from app.ratelimit import limit_uploads
 from app.routes.documents import DB, load_document, load_editable
 from app.storage import Storage, StorageError, get_storage
 from app.uploads import read_upload
@@ -51,7 +52,7 @@ def list_attachments(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> list[Attac
     return [_out(a) for a in rows]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=[Depends(limit_uploads)])
 async def upload_attachment(
     doc_id: uuid.UUID,
     user: CurrentUser,

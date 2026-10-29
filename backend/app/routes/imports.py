@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.auth import CurrentUser
 from app.config import Settings, get_settings
 from app.imports import ConversionError, convert
+from app.ratelimit import limit_uploads
 from app.routes.documents import DB, DocumentOut, apply_update, document_out, load_editable
 from app.uploads import read_upload
 
@@ -37,7 +38,7 @@ async def _convert(file: UploadFile, settings: Settings) -> tuple[str, dict[str,
     return upload.name, result.content, result.warnings
 
 
-@router.post("/imports")
+@router.post("/imports", dependencies=[Depends(limit_uploads)])
 async def preview_import(
     _user: CurrentUser, settings: SettingsDep, file: Annotated[UploadFile, File()]
 ) -> ImportPreview:
@@ -53,7 +54,7 @@ async def preview_import(
     )
 
 
-@router.post("/documents/{doc_id}/imports")
+@router.post("/documents/{doc_id}/imports", dependencies=[Depends(limit_uploads)])
 async def import_into_document(
     doc_id: uuid.UUID,
     user: CurrentUser,
