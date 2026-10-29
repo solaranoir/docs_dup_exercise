@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.storage import Storage, StorageError, optional_storage
 
 router = APIRouter(prefix="/health", tags=["health"])
 log = logging.getLogger(__name__)
@@ -19,10 +20,26 @@ def live() -> dict[str, str]:
 
 
 @router.get("/ready")
-def ready(db: Annotated[Session, Depends(get_db)]) -> JSONResponse:
+def ready(
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[Storage | None, Depends(optional_storage)],
+) -> JSONResponse:
+    # Storage problems are reported but don't fail readiness: documents still work without
+    # attachments, and a failing health check would make Render restart a healthy API.
+    storage_status = "unconfigured"
+    if storage is not None:
+        try:
+            storage.check()
+            storage_status = "ok"
+        except StorageError:
+            log.exception("readiness: storage check failed")
+            storage_status = "error"
     try:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError:
         log.exception("readiness: database check failed")
-        return JSONResponse({"status": "unavailable", "database": "error"}, status_code=503)
-    return JSONResponse({"status": "ok", "database": "ok"})
+        return JSONResponse(
+            {"status": "unavailable", "database": "error", "storage": storage_status},
+            status_code=503,
+        )
+    return JSONResponse({"status": "ok", "database": "ok", "storage": storage_status})

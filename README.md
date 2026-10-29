@@ -4,7 +4,7 @@ Single-user editing + explicit-user sharing workspace: React/Tiptap frontend, Fa
 PostgreSQL persistence, S3-compatible attachment storage. Demo-quality release with seeded
 identities (Alice, Bob, Charlie) — **not secure for public internet use** (see ADR-004).
 
-Status: **Week 2 — Documents** (rich-text editor, document CRUD, revision conflicts, E2E).
+Status: **Week 3 — Imports + sharing** (.txt/.md/.docx import, attachments, view-only sharing).
 Plan and task tracking: [docs/PLAN.md](docs/PLAN.md) and the GitHub issues.
 
 ## Layout
@@ -30,13 +30,19 @@ cp .env.example backend/.env          # adjust DATABASE_URL / SESSION_SECRET
 docker-compose up -d db               # or `docker compose`; data in a project-scoped volume
 cd backend
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.lock && pip install -e . --no-deps
+pip install -r requirements-dev.lock && pip install -e . --no-deps   # runtime-only: requirements.lock
 alembic upgrade head
 python scripts/seed_demo.py           # idempotent
+python -m moto.server -p 9000 &       # local S3-compatible storage for attachments (in-memory)
 uvicorn app.main:app --reload         # http://localhost:8000/docs
 ```
 
-Check: `curl localhost:8000/health/live`, `curl localhost:8000/health/ready`.
+Attachments need object storage. Locally the `.env.example` values point at moto; its data is
+in-memory and lost on restart (production uses Cloudflare R2, which is durable). Without
+`STORAGE_BUCKET` the API still runs, and attachment endpoints return 503.
+
+Check: `curl localhost:8000/health/live`, `curl localhost:8000/health/ready` (reports
+`database` and `storage`: `ok`, `error`, or `unconfigured`).
 
 ## Local run (frontend)
 
@@ -62,8 +68,8 @@ cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 cd e2e      && npm ci && npx playwright install chromium && npx playwright test
 ```
 
-Playwright starts the API (migrate + seed + uvicorn on :8000) and Vite (:5173) itself unless
-they are already running; it uses `DATABASE_URL` from the environment.
+Playwright starts moto (:9000), the API (migrate + seed + uvicorn on :8000) and Vite (:5173)
+itself unless they are already running; it uses `DATABASE_URL` from the environment.
 
 `pytest` uses `TEST_DATABASE_URL` when set (PostgreSQL in CI); otherwise a temporary SQLite
 file so the suite runs without a server. CI on every PR runs everything against PostgreSQL 16.
@@ -76,7 +82,12 @@ file so the suite runs without a server. CI on every PR runs everything against 
 | `SESSION_SECRET` | Signs demo sessions; required when `ENVIRONMENT=production` |
 | `ENVIRONMENT` | `development` / `production` (secure cookies, secret check) |
 | `CORS_ORIGINS` | JSON list of allowed browser origins |
-| `STORAGE_*` | Object storage (Week 3) |
+| `STORAGE_ENDPOINT` | S3 API endpoint (R2: `https://<account>.r2.cloudflarestorage.com`; empty = AWS) |
+| `STORAGE_BUCKET` | Private bucket (`document-workspace-attachments` in production) |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | Bucket-scoped credentials; secrets only in Render |
+| `STORAGE_REGION` | `auto` for R2 |
+| `STORAGE_AUTO_CREATE_BUCKET` | Local/CI only; creates the bucket on first use |
+| `MAX_UPLOAD_BYTES` / `MAX_ATTACHMENTS_PER_DOCUMENT` | Defaults 10 MB / 10 |
 | `VITE_API_BASE_URL` | Optional API origin; empty = same origin (`/api` proxied/rewritten) |
 
 ## Deploy (Render)
@@ -84,9 +95,11 @@ file so the suite runs without a server. CI on every PR runs everything against 
 1. Render dashboard → **New → Blueprint** → select this repo; `render.yaml` provisions
    `docworkspace-db` (PostgreSQL), `docworkspace-api` (FastAPI) and `docworkspace-web`
    (static site; rewrites `/api/*` to the API so the session cookie is first-party).
-2. `SESSION_SECRET` is generated; set `CORS_ORIGINS` once the frontend URL exists.
+2. `SESSION_SECRET` is generated; set `CORS_ORIGINS` once the frontend URL exists. Set
+   `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` on
+   **docworkspace-api** only (never on the static site).
 3. Start command runs `alembic upgrade head` and the idempotent seed, then uvicorn on `$PORT`.
-4. Verify `https://<api>.onrender.com/health/ready` returns `{"status":"ok"}`.
+4. Verify `https://<api>.onrender.com/health/ready` returns `"database":"ok"` and `"storage":"ok"`.
 
 Free plan caveats: the web service sleeps when idle; free PostgreSQL expires after 30 days.
 
@@ -94,6 +107,12 @@ Free plan caveats: the web service sleeps when idle; free PostgreSQL expires aft
 
 No real-time collaboration, comments, version history, public links, email invites, SSO, or
 offline sync. Demo identities must be replaced with real auth before public release.
+
+Import is best-effort: `.txt` → paragraphs; `.md` → headings (H4+ become H3), bold/italic,
+lists; links, images, code blocks, quotes and HTML are flattened or removed; `.docx` →
+headings, bold/italic/underline, bulleted/numbered lists; tables, images, tracked changes,
+fonts, colours and section layout are lost. The preview lists every such loss before saving.
+Sharing is view-only with seeded accounts; attachments have no virus scanning.
 
 Planned for future releases (post-MVP, not available yet):
 

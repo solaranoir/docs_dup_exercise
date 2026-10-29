@@ -5,6 +5,16 @@ import { defineConfig, devices } from "@playwright/test";
 const python = process.env.PYTHON ?? ".venv/bin/python";
 const reuse = !process.env.CI;
 
+// Local S3-compatible server (moto) so attachments run end-to-end without cloud credentials.
+const storageEnv = {
+  STORAGE_ENDPOINT: "http://localhost:9000",
+  STORAGE_BUCKET: "e2e-attachments",
+  STORAGE_ACCESS_KEY: "test",
+  STORAGE_SECRET_KEY: "test",
+  STORAGE_REGION: "us-east-1",
+  STORAGE_AUTO_CREATE_BUCKET: "true",
+};
+
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
@@ -18,9 +28,17 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
+      command: `${python} -m moto.server -p 9000`,
+      cwd: "../backend",
+      url: "http://localhost:9000/moto-api/",
+      reuseExistingServer: reuse,
+      timeout: 60_000,
+    },
+    {
       command: `${python} -m alembic upgrade head && ${python} scripts/seed_demo.py && ${python} -m uvicorn app.main:app --port 8000`,
       cwd: "../backend",
       url: "http://localhost:8000/health/ready",
+      env: { ...storageEnv, ...(process.env.DATABASE_URL ? { DATABASE_URL: process.env.DATABASE_URL } : {}) },
       reuseExistingServer: reuse,
       timeout: 60_000,
     },
