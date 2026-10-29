@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import demo, health
+from app.routes import demo, documents, health
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 access_log = logging.getLogger("app.access")
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(demo.router)
+    app.include_router(documents.router)
     return app
 
 
