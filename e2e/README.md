@@ -1,3 +1,3 @@
 # E2E
 
-Playwright suites (#18). Fixtures: `loginAs(page, "alice" | "bob" | "charlie")`.
+Playwright critical journeys. `npx playwright test` starts API + Vite automatically. Fixtures: `loginAs(page, "alice" | "bob" | "charlie")`, `newDocument(page)`.

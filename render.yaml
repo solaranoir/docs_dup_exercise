@@ -1,5 +1,4 @@
-# Render Blueprint. Week 1 provisions the API + managed PostgreSQL.
-# The frontend static site is added in Week 2 (DOC-02) once frontend/ exists.
+# Render Blueprint: API + managed PostgreSQL + static frontend.
 databases:
   - name: docworkspace-db
     databaseName: docworkspace
@@ -33,3 +32,26 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         sync: false # JSON list, e.g. ["https://docworkspace-web.onrender.com"]
+
+  - type: web
+    name: docworkspace-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    # Proxy /api to the API so the browser sees one origin and the session cookie stays
+    # first-party (separate onrender.com subdomains are cross-site).
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://docworkspace-api.onrender.com/api/*
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
