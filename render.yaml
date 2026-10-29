@@ -1,0 +1,35 @@
+# Render Blueprint. Week 1 provisions the API + managed PostgreSQL.
+# The frontend static site is added in Week 2 (DOC-02) once frontend/ exists.
+databases:
+  - name: docworkspace-db
+    databaseName: docworkspace
+    user: docworkspace
+    plan: free # NOTE: free Postgres expires after 30 days — see issue #5
+
+services:
+  - type: web
+    name: docworkspace-api
+    runtime: python
+    plan: free # sleeps when idle; first request after sleep is slow
+    rootDir: backend
+    buildCommand: pip install -r requirements.lock && pip install -e . --no-deps
+    # Migrations and the idempotent demo seed run before the server binds. Free plans do not
+    # support preDeployCommand; move both there on a paid plan.
+    startCommand: >-
+      alembic upgrade head &&
+      python scripts/seed_demo.py &&
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docworkspace-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false # JSON list, e.g. ["https://docworkspace-web.onrender.com"]
