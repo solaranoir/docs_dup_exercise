@@ -19,12 +19,15 @@ render.yaml     Render Blueprint
 
 ## Local run (backend)
 
-Prerequisites: Python 3.12+, PostgreSQL 16 (via `docker compose up -d db` or a local install).
-Node 22+ is required from Week 2.
+Prerequisites: Python 3.12+, Node 22+, PostgreSQL 16. Recommended contained setup (no global
+services): [mise](https://mise.jdx.dev) pins Node/Python via `mise.toml`, and Postgres/MinIO run
+in containers (Docker Desktop, OrbStack, or `brew install colima docker docker-compose &&
+colima start`).
 
 ```bash
+mise install                          # Node 22 + Python 3.12 from mise.toml
 cp .env.example backend/.env          # adjust DATABASE_URL / SESSION_SECRET
-docker compose up -d db               # optional if you have local Postgres
+docker-compose up -d db               # or `docker compose`; data in a project-scoped volume
 cd backend
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.lock && pip install -e . --no-deps
