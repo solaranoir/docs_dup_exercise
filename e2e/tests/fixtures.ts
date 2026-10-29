@@ -23,3 +23,6 @@ export async function newDocument(page: Page): Promise<string> {
 }
 
 export const uniqueTitle = (prefix: string) => `${prefix} ${Date.now().toString(36)}`;
+
+/** Sample upload files shared with the backend converter tests. */
+export const FIXTURES = new URL("../../backend/tests/fixtures", import.meta.url).pathname;

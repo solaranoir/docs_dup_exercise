@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type DocumentSummary } from "../api";
+import { ImportDialog } from "../components/ImportDialog";
 import { navigate } from "../router";
 
 function Section({ title, docs, empty }: { title: string; docs: DocumentSummary[]; empty: string }) {
@@ -37,6 +38,8 @@ export function DocumentList() {
     api.listDocuments().then(setDocs, (e: Error) => setError(e.message));
   }, []);
 
+  const [importOpen, setImportOpen] = useState(false);
+
   const createNew = async () => {
     const doc = await api.createDocument();
     navigate(`#/doc/${doc.id}`);
@@ -48,10 +51,20 @@ export function DocumentList() {
     <div className="documents">
       <div className="documents-head">
         <h1>My Documents</h1>
-        <button type="button" className="primary" onClick={createNew}>
-          New document
-        </button>
+        <div className="actions">
+          <button type="button" onClick={() => setImportOpen(true)}>
+            Import file
+          </button>
+          <button type="button" className="primary" onClick={createNew}>
+            New document
+          </button>
+        </div>
       </div>
+      <ImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        target={{ kind: "new", onCreated: (doc) => navigate(`#/doc/${doc.id}`) }}
+      />
       <Section
         title="Owned by me"
         docs={docs.filter((d) => d.permission === "owner")}

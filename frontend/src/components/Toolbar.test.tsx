@@ -2,7 +2,7 @@ import { Editor } from "@tiptap/react";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { extensions } from "../pages/EditorPage";
+import { extensions } from "../editorExtensions";
 import { Toolbar } from "./Toolbar";
 
 let editor: Editor;

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
@@ -10,10 +11,12 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser
 from app.content import ContentError, validate_content
 from app.db import get_db
-from app.models import EMPTY_DOC, Document, DocumentGrant, User, utcnow
+from app.models import EMPTY_DOC, Attachment, Document, DocumentGrant, User, utcnow
 from app.policy import Permission, can_delete, can_edit, can_read, permission_for
+from app.storage import Storage, StorageError, optional_storage
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+log = logging.getLogger(__name__)
 DB = Annotated[Session, Depends(get_db)]
 
 TITLE_MAX = 160
@@ -86,7 +89,7 @@ def _summary(doc: Document, owner: User, permission: Permission) -> DocumentSumm
     )
 
 
-def _out(db: Session, doc: Document, permission: Permission) -> DocumentOut:
+def document_out(db: Session, doc: Document, permission: Permission) -> DocumentOut:
     owner = db.get(User, doc.owner_id)
     assert owner is not None
     return DocumentOut(
@@ -96,7 +99,7 @@ def _out(db: Session, doc: Document, permission: Permission) -> DocumentOut:
     )
 
 
-def _load(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document, Permission]:
+def load_document(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document, Permission]:
     doc = db.get(Document, doc_id)
     permission = permission_for(db, user, doc) if doc else None
     # Privacy-preserving: documents the caller cannot read look exactly like missing ones.
@@ -129,32 +132,44 @@ def create_document(body: DocumentCreate, user: CurrentUser, db: DB) -> Document
     doc = Document(owner_id=user.id, title=body.title, content_json=body.content_json or EMPTY_DOC)
     db.add(doc)
     db.commit()
-    return _out(db, doc, "owner")
+    return document_out(db, doc, "owner")
 
 
 @router.get("/{doc_id}")
 def get_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
-    doc, permission = _load(db, user, doc_id)
-    return _out(db, doc, permission)
+    doc, permission = load_document(db, user, doc_id)
+    return document_out(db, doc, permission)
 
 
 @router.patch("/{doc_id}")
 def update_document(
     doc_id: uuid.UUID, body: DocumentPatch, user: CurrentUser, db: DB
 ) -> DocumentOut:
-    doc, permission = _load(db, user, doc_id)
-    if not can_edit(permission):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "You have view-only access")
-    values: dict[str, Any] = {"revision": Document.revision + 1, "updated_at": utcnow()}
+    doc, permission = load_editable(db, user, doc_id)
+    values: dict[str, Any] = {}
     if body.title is not None:
         values["title"] = body.title
     if body.content_json is not None:
         values["content_json"] = body.content_json
-    # Compare-and-swap on revision (ADR-003): a stale writer never overwrites newer content.
+    apply_update(db, doc, body.expected_revision, values)
+    return document_out(db, doc, permission)
+
+
+def load_editable(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document, Permission]:
+    doc, permission = load_document(db, user, doc_id)
+    if not can_edit(permission):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You have view-only access")
+    return doc, permission
+
+
+def apply_update(
+    db: Session, doc: Document, expected_revision: int, values: dict[str, Any]
+) -> None:
+    """Compare-and-swap on revision (ADR-003): a stale writer never overwrites newer content."""
     result = db.execute(
         update(Document)
-        .where(Document.id == doc_id, Document.revision == body.expected_revision)
-        .values(**values)
+        .where(Document.id == doc.id, Document.revision == expected_revision)
+        .values(**values, revision=Document.revision + 1, updated_at=utcnow())
     )
     if result.rowcount == 0:  # type: ignore[attr-defined]
         db.rollback()
@@ -169,13 +184,25 @@ def update_document(
         )
     db.commit()
     db.refresh(doc)
-    return _out(db, doc, permission)
 
 
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> None:
-    doc, permission = _load(db, user, doc_id)
+def delete_document(
+    doc_id: uuid.UUID,
+    user: CurrentUser,
+    db: DB,
+    storage: Annotated[Storage | None, Depends(optional_storage)],
+) -> None:
+    doc, permission = load_document(db, user, doc_id)
     if not can_delete(permission):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can delete a document")
+    keys = list(db.scalars(select(Attachment.object_key).where(Attachment.document_id == doc.id)))
     db.delete(doc)
     db.commit()
+    for key in keys:
+        if storage is None:
+            break
+        try:
+            storage.delete(key)
+        except StorageError:
+            log.warning("orphaned attachment object after document delete: %s", key)

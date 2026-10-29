@@ -1,27 +1,14 @@
-import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type DocumentFull } from "../api";
+import { AttachmentsPanel } from "../components/AttachmentsPanel";
+import { ImportDialog } from "../components/ImportDialog";
 import { SaveStatus, type SaveState } from "../components/SaveStatus";
+import { ShareDialog } from "../components/ShareDialog";
 import { Toolbar } from "../components/Toolbar";
 import { normalizeContent } from "../content";
+import { extensions } from "../editorExtensions";
 import { navigate, navigationGuard } from "../router";
-
-/** Only the nodes/marks the server schema accepts (backend/app/content.py). */
-export const extensions = [
-  StarterKit.configure({
-    heading: { levels: [1, 2, 3] },
-    blockquote: false,
-    codeBlock: false,
-    code: false,
-    horizontalRule: false,
-    strike: false,
-    link: false,
-  }),
-  TextStyle,
-  FontSize,
-];
 
 export function EditorPage({ id }: { id: string }) {
   const [doc, setDoc] = useState<DocumentFull | null>(null);
@@ -46,6 +33,9 @@ export function EditorPage({ id }: { id: string }) {
 
 function DocumentEditor({ initial }: { initial: DocumentFull }) {
   const readOnly = initial.permission === "viewer";
+  const isOwner = initial.permission === "owner";
+  const [importOpen, setImportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [title, setTitle] = useState(initial.title);
   const [revision, setRevision] = useState(initial.revision);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -138,6 +128,19 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
         ) : (
           <>
             <SaveStatus state={saveState} />
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              disabled={dirty}
+              title={dirty ? "Save your changes before importing" : undefined}
+            >
+              Import…
+            </button>
+            {isOwner && (
+              <button type="button" onClick={() => setShareOpen(true)}>
+                Share
+              </button>
+            )}
             <button type="button" className="primary" onClick={() => void save()} disabled={saveState === "saving"}>
               Save
             </button>
@@ -167,6 +170,31 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
       )}
       {editor && !readOnly && <Toolbar editor={editor} />}
       <EditorContent editor={editor} className="editor" />
+      <AttachmentsPanel documentId={initial.id} canEdit={!readOnly} />
+      {!readOnly && (
+        <ImportDialog
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          target={{
+            kind: "existing",
+            document: { ...initial, title, revision },
+            onApplied: (doc) => {
+              editor?.commands.setContent(doc.content_json, { emitUpdate: false });
+              setRevision(doc.revision);
+              setMessage(null);
+              setSaveState("saved");
+            },
+          }}
+        />
+      )}
+      {isOwner && (
+        <ShareDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          documentId={initial.id}
+          ownerId={initial.owner.id}
+        />
+      )}
     </div>
   );
 }

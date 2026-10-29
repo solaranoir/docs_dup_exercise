@@ -31,10 +31,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.lock
-      - name: Install (pinned)
+          cache-dependency-path: backend/requirements-dev.lock
+      - name: Install (pinned, dev)
         run: |
-          pip install -r requirements.lock
+          pip install -r requirements-dev.lock
           pip install -e . --no-deps
       - name: Lint
         run: |
@@ -98,13 +98,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.lock
+          cache-dependency-path: backend/requirements-dev.lock
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install backend
         working-directory: backend
-        run: pip install -r requirements.lock && pip install -e . --no-deps
+        run: pip install -r requirements-dev.lock && pip install -e . --no-deps
       - name: Install frontend + e2e
         run: |
           npm ci --prefix frontend

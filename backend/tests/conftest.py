@@ -15,6 +15,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import get_db
 from app.main import create_app
 from app.seed import seed_demo_users
+from app.storage import MemoryStorage, get_storage, optional_storage
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -51,9 +54,16 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-def client(db: Session) -> Iterator[TestClient]:
+def storage() -> MemoryStorage:
+    return MemoryStorage()
+
+
+@pytest.fixture
+def client(db: Session, storage: MemoryStorage) -> Iterator[TestClient]:
     app = create_app()
     app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_storage] = lambda: storage
+    app.dependency_overrides[optional_storage] = lambda: storage
     with TestClient(app) as c:
         yield c
 
