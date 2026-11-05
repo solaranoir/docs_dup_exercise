@@ -106,6 +106,22 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+    # Set by the owner to retire a document (DOC-021): hidden from lists, read-only until restored.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class DocumentVisit(Base):
+    """When a user last opened a document, for their "Recently opened" list (DOC-022)."""
+
+    __tablename__ = "document_visits"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    last_opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class DocumentGrant(Base):

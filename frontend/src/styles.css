@@ -263,6 +263,23 @@ input, textarea { color: var(--text); }
 .login-back { display: inline-block; margin-top: 20px; font-size: 0.9rem; }
 .loading { padding: 22px; color: var(--muted); }
 
+/* Organisation (DOC-019..022) */
+.list-controls { display: flex; justify-content: flex-end; margin: 4px 0 -8px; }
+.list-controls label { color: var(--muted); font-size: 0.92rem; display: flex; gap: 8px; align-items: center; }
+.doc-list li > button { padding: 6px 12px; font-size: 0.9rem; }
+.archived { margin-top: 28px; }
+.link-button {
+  background: none; border: 0; padding: 4px 0; color: var(--link); font: inherit;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.link-button:hover:not(:disabled) { background: none; color: var(--accent-hover); }
+.badge-archived { color: var(--warn); border-color: var(--warn); }
+.editor-head .badge { align-self: center; } /* phones stretch the head's items */
+.notice-archived {
+  display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  border-color: var(--warn); background: rgb(232 182 107 / 0.1);
+}
+
 /* Keyboard access (DOC-015) */
 .skip-link {
   position: absolute; left: 12px; top: -100px; z-index: 100; padding: 10px 14px;

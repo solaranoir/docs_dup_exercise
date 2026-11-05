@@ -57,6 +57,7 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
             "sessions",
             "user_identities",
             "allowed_emails",
+            "document_visits",
             "attachments",
             "document_grants",
             "documents",
