@@ -23,7 +23,7 @@ class Case:
     method: str
     path: str  # FastAPI route template
     expected: tuple[int, int, int, int]  # owner, viewer, stranger, anonymous
-    body: str = "none"  # none | json-title | json-share | upload | import
+    body: str = "none"  # none | json-title | json-share | json-folder | json-tags | upload | import
 
 
 CASES = [
@@ -34,6 +34,9 @@ CASES = [
     Case("POST", "/api/documents/{doc_id}/restore", (200, 403, 404, 401)),
     # Any reader may copy into a document they own; the source is untouched.
     Case("POST", "/api/documents/{doc_id}/duplicate", (201, 201, 404, 401)),
+    # Personal organisation (ADR-010): any reader files/tags in their own view only.
+    Case("PUT", "/api/documents/{doc_id}/folder", (200, 200, 404, 401), "json-folder"),
+    Case("PUT", "/api/documents/{doc_id}/tags", (200, 200, 404, 401), "json-tags"),
     Case("POST", "/api/documents/{doc_id}/imports", (200, 403, 404, 401), "import"),
     Case("GET", "/api/documents/{doc_id}/attachments", (200, 200, 404, 401)),
     Case("POST", "/api/documents/{doc_id}/attachments", (201, 403, 404, 401), "upload"),
@@ -81,6 +84,10 @@ def _request(client: TestClient, case: Case, world: World, role: str) -> Any:
         kwargs["json"] = {"expected_revision": 1, "title": "Changed"}
     elif case.body == "json-share":
         kwargs["json"] = {"email": "bob@demo.test"}  # existing grant → 200 for the owner
+    elif case.body == "json-folder":
+        kwargs["json"] = {"folder_id": None}
+    elif case.body == "json-tags":
+        kwargs["json"] = {"tags": ["pota"]}
     elif case.body == "upload":
         kwargs["files"] = {"file": ("more.txt", b"more", "text/plain")}
     elif case.body == "import":
