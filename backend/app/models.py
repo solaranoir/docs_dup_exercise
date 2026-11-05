@@ -12,10 +12,14 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from app.content import plain_text
 
 # JSONB on PostgreSQL (ADR-002); plain JSON elsewhere so unit tests can run without a server.
 JsonContent = JSON().with_variant(JSONB(), "postgresql")
@@ -108,6 +112,17 @@ class Document(Base):
     )
     # Set by the owner to retire a document (DOC-021): hidden from lists, read-only until restored.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Plain text of content_json for search (DOC-017). Derived, never set directly: the listeners
+    # below cover ORM writes and apply_update() covers its bulk UPDATE. On PostgreSQL the
+    # migration also adds a generated ``search_vector`` tsvector (title + this) with a GIN index;
+    # it is not mapped here because it only exists on PostgreSQL.
+    search_text: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+@event.listens_for(Document, "before_insert")
+@event.listens_for(Document, "before_update")
+def _sync_search_text(_mapper: Any, _conn: Any, doc: Document) -> None:
+    doc.search_text = plain_text(doc.content_json if doc.content_json is not None else EMPTY_DOC)
 
 
 class DocumentVisit(Base):

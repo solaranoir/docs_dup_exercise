@@ -1,5 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { api, type DocumentSummary } from "../api";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { api, type DocumentSummary, type SearchResult } from "../api";
 import { Link } from "../components/Link";
 import { navigate, paths } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
@@ -88,6 +96,32 @@ function DocTime({ doc, when }: { doc: DocumentSummary; when: When }) {
   );
 }
 
+function DocRow({
+  doc: d,
+  when,
+  title,
+  children,
+}: {
+  doc: DocumentSummary;
+  when: When;
+  title?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <li>
+      <Link to={paths.doc(d.id)}>{title ?? d.title}</Link>
+      {d.permission !== "owner" && (
+        <span className={`badge badge-${d.permission}`}>
+          {d.permission === "viewer" ? "View only" : "Can edit"} ·{" "}
+          {d.owner.display_name}
+        </span>
+      )}
+      <DocTime doc={d} when={when} />
+      {children}
+    </li>
+  );
+}
+
 function Section({
   title,
   docs,
@@ -111,20 +145,104 @@ function Section({
       ) : (
         <ul className="doc-list">
           {docs.map((d) => (
-            <li key={d.id}>
-              <Link to={paths.doc(d.id)}>{d.title}</Link>
-              {d.permission !== "owner" && (
-                <span className={`badge badge-${d.permission}`}>
-                  {d.permission === "viewer" ? "View only" : "Can edit"} ·{" "}
-                  {d.owner.display_name}
-                </span>
-              )}
-              <DocTime doc={d} when={when} />
+            <DocRow key={d.id} doc={d} when={when}>
               {action?.(d)}
-            </li>
+            </DocRow>
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** The server returns at most this many hits (DOC-017). */
+export const SEARCH_LIMIT = 50;
+const SEARCH_DELAY_MS = 250;
+
+interface SearchState {
+  /** The query these results answer; lags the input while the user is still typing. */
+  query: string;
+  results: SearchResult[] | null;
+  error: string | null;
+}
+const NO_SEARCH: SearchState = { query: "", results: null, error: null };
+
+/** Debounced server search; responses for superseded queries are dropped. */
+function useSearch(input: string): SearchState {
+  const q = input.trim();
+  const [state, setState] = useState<SearchState>(NO_SEARCH);
+  useEffect(() => {
+    if (!q) return;
+    let current = true;
+    const timer = window.setTimeout(() => {
+      api.searchDocuments(q).then(
+        (results) => current && setState({ query: q, results, error: null }),
+        (e: Error) => current && setState({ query: q, results: null, error: e.message }),
+      );
+    }, SEARCH_DELAY_MS);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [q]);
+  return q ? state : NO_SEARCH;
+}
+
+export function searchStatus({ query, results }: SearchState): string {
+  if (!query || !results) return "";
+  const n = results.length;
+  if (n === 0) return `No documents match “${query}”.`;
+  if (n >= SEARCH_LIMIT) {
+    return `Showing the first ${n} documents that match “${query}”. Add words to narrow it down.`;
+  }
+  return `${n} ${n === 1 ? "document matches" : "documents match"} “${query}”.`;
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Marks where the query's words (and their hyphen/dot/slash-separated parts, as the server
+ * splits them) start a word, mirroring the server's word-prefix matching. React escapes every
+ * piece, so a snippet can never inject markup. */
+export function Highlight({ text, query }: { text: string; query: string }) {
+  const words = query
+    .split(/\s+/)
+    .flatMap((w) => [w, ...w.split(/[-./]/)])
+    .filter((w) => /[\p{L}\p{N}]/u.test(w));
+  if (words.length === 0) return <>{text}</>;
+  const longestFirst = [...new Set(words)].sort((x, y) => y.length - x.length);
+  const alternatives = longestFirst.map(escapeRegExp).join("|");
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(${alternatives})`, "giu");
+  return (
+    <>
+      {text
+        .split(pattern)
+        .map((part, i) => (i % 2 === 1 ? <mark key={i}>{part}</mark> : part))}
+    </>
+  );
+}
+
+function SearchResults({ search }: { search: SearchState }) {
+  if (search.error) return <p role="alert">{search.error}</p>;
+  if (!search.results?.length) return null;
+  return (
+    <section aria-labelledby="h-search-results">
+      <h2 id="h-search-results">Search results</h2>
+      <ul className="doc-list">
+        {search.results.map((d) => (
+          <DocRow
+            key={d.id}
+            doc={d}
+            when="edited"
+            title={<Highlight text={d.title} query={search.query} />}
+          >
+            {d.snippet && (
+              <p className="snippet">
+                <Highlight text={d.snippet} query={search.query} />
+              </p>
+            )}
+          </DocRow>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -233,6 +351,11 @@ export function DocumentList() {
   useEffect(load, [load]);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const search = useSearch(query);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searching = query.trim() !== "";
+  const status = searchStatus(search);
 
   const createNew = async () => {
     const doc = await api.createDocument();
@@ -270,35 +393,85 @@ export function DocumentList() {
           />
         </Suspense>
       )}
-      {owned.length === 0 && <Onboarding />}
-      {recent.length > 0 && <Section title="Recently opened" docs={recent} when="opened" />}
-      {docs.length > 1 && (
+      {owned.length === 0 && !searching && <Onboarding />}
+      {recent.length > 0 && !searching && (
+        <Section title="Recently opened" docs={recent} when="opened" />
+      )}
+      {docs.length > 0 && (
         <div className="list-controls">
-          <label>
-            Sort by{" "}
-            <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-              {SORTS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div role="search" className="doc-search">
+            <label htmlFor="doc-search">Search documents</label>
+            <div className="doc-search-field">
+              <input
+                id="doc-search"
+                ref={searchInput}
+                type="search"
+                value={query}
+                maxLength={200}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Titles and text, e.g. K-4392"
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && query) {
+                    e.preventDefault();
+                    setQuery("");
+                  }
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    searchInput.current?.focus();
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+          {docs.length > 1 && !searching && (
+            <label>
+              Sort by{" "}
+              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+                {SORTS.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
-      <Section
-        title="Owned by me"
-        docs={owned}
-        empty="No documents yet. Create one to get started."
-        when={when}
-      />
-      <Section
-        title="Shared with me"
-        docs={sorted.filter((d) => d.permission !== "owner")}
-        empty="Nothing has been shared with you yet."
-        when={when}
-      />
-      <ArchivedSection onRestored={load} />
+      {/* Always in the DOM (empty when idle) so screen readers announce each new count. */}
+      <p
+        role="status"
+        className={search.results?.length === 0 ? "search-status empty" : "search-status"}
+      >
+        {status}
+      </p>
+      {searching ? (
+        <SearchResults search={search} />
+      ) : (
+        <>
+          <Section
+            title="Owned by me"
+            docs={owned}
+            empty="No documents yet. Create one to get started."
+            when={when}
+          />
+          <Section
+            title="Shared with me"
+            docs={sorted.filter((d) => d.permission !== "owner")}
+            empty="Nothing has been shared with you yet."
+            when={when}
+          />
+          <ArchivedSection onRestored={load} />
+        </>
+      )}
     </div>
   );
 }
