@@ -13,6 +13,7 @@ repository keeps its name. The MVP delivery history is in [PLAN.md](PLAN.md).
 | Signup | Invite allowlist only during v0.5 | ADR-009 |
 | Database | Render Postgres upgraded to a paid plan (2026-11-04); demo data disposable, removed at cut-over | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) |
 | Folders and tags | Personal per user; one-level folders, one per document; sharing stays per document; free-form tags with a starter set | [ADR-010](adr/0010-personal-folders-and-tags.md) |
+| Templates | Four built-in templates in code, versioned; ordinary documents with labelled lines; picker behind New document; title prefilled with the local date | [ADR-011](adr/0011-built-in-templates.md) |
 | Stack | Keep React/Tiptap, FastAPI, PostgreSQL, R2; no Redis, CRDT or AI in v1.0 | roadmap §9 |
 
 ## Releases

@@ -14,9 +14,11 @@ export async function loginAs(page: Page, user: DemoUser): Promise<void> {
   await expect(page.getByText("Signed in as")).toBeVisible();
 }
 
-/** Creates a document via the UI and returns its URL once the editor route is active. */
+/** Creates a blank document via the UI and returns its URL once the editor route is active. */
 export async function newDocument(page: Page): Promise<string> {
   await page.getByRole("button", { name: "New document" }).click();
+  // The picker opens with "Blank document" selected (ADR-011).
+  await page.getByRole("dialog", { name: "New document" }).getByRole("button", { name: "Create" }).click();
   await expect(page).toHaveURL(/\/doc\/[\w-]+$/);
   await expect(page.getByLabel("Document body")).toBeVisible();
   return page.url();
