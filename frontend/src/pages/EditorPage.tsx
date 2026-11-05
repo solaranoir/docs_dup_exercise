@@ -10,7 +10,7 @@ import { displayShortcut, Toolbar, TOOLBAR_SHORTCUT } from "../components/Toolba
 import { normalizeContent } from "../content";
 import { extensions } from "../editorExtensions";
 import { Link } from "../components/Link";
-import { navigationGuard, paths } from "../router";
+import { navigate, navigationGuard, paths } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
 
 export function EditorPage({ id }: { id: string }) {
@@ -31,12 +31,22 @@ export function EditorPage({ id }: { id: string }) {
       </div>
     );
   if (!doc) return <p className="loading">Loading…</p>;
-  return <DocumentEditor initial={doc} />;
+  // Archiving/restoring changes editability, so start a fresh editor for the new state.
+  return <DocumentEditor key={doc.archived_at ?? "active"} initial={doc} onReplace={setDoc} />;
 }
 
-function DocumentEditor({ initial }: { initial: DocumentFull }) {
-  const readOnly = initial.permission === "viewer";
+function DocumentEditor({
+  initial,
+  onReplace,
+}: {
+  initial: DocumentFull;
+  onReplace: (doc: DocumentFull) => void;
+}) {
+  const isViewer = initial.permission === "viewer";
+  const archived = initial.archived_at !== null;
+  const readOnly = isViewer || archived;
   const isOwner = initial.permission === "owner";
+  const [busy, setBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [title, setTitle] = useState(initial.title);
@@ -119,6 +129,28 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await action();
+    } catch (e) {
+      setSaveState("error");
+      setMessage((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const duplicate = () =>
+    run(async () => {
+      const copy = await api.duplicateDocument(initial.id);
+      navigate(paths.doc(copy.id));
+    });
+  const setArchived = (value: boolean) =>
+    run(async () => {
+      onReplace(await (value ? api.archiveDocument(initial.id) : api.restoreDocument(initial.id)));
+    });
+  const saveFirst = dirty ? "Save your changes first" : undefined;
+
   const reloadLatest = async () => {
     if (!window.confirm("Discard your unsaved edits and load the latest version?")) return;
     const latest = await api.getDocument(initial.id);
@@ -135,11 +167,21 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
         <Link to={paths.list}>
           <span aria-hidden="true">← </span>Documents
         </Link>
-        {readOnly ? (
+        {isViewer && (
           <span className="badge badge-viewer">View only · shared by {initial.owner.display_name}</span>
-        ) : (
+        )}
+        {archived && <span className="badge badge-archived">Archived</span>}
+        {!readOnly && <SaveStatus state={saveState} />}
+        <button type="button" onClick={() => void duplicate()} disabled={busy || dirty} title={saveFirst}>
+          Duplicate
+        </button>
+        {isOwner && !archived && (
+          <button type="button" onClick={() => void setArchived(true)} disabled={busy || dirty} title={saveFirst}>
+            Archive
+          </button>
+        )}
+        {!readOnly && (
           <>
-            <SaveStatus state={saveState} />
             <button
               type="button"
               onClick={() => setImportOpen(true)}
@@ -170,6 +212,19 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
           markDirty();
         }}
       />
+      {archived && (
+        <div className="notice notice-archived" role="note">
+          <span>
+            Archived {new Date(initial.archived_at!).toLocaleDateString()}. It's hidden from document
+            lists and can't be edited{isOwner ? " until you restore it" : ""}.
+          </span>
+          {isOwner && (
+            <button type="button" onClick={() => void setArchived(false)} disabled={busy}>
+              Restore
+            </button>
+          )}
+        </div>
+      )}
       {message && (
         <div role="alert" className={`notice notice-${saveState}`}>
           {message}

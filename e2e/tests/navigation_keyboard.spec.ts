@@ -13,12 +13,12 @@ test("path routes: deep links, back/forward, legacy #/ links, unknown paths", as
   // Back/forward move between list and document without a reload.
   await page.getByRole("link", { name: "Documents", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("link", { name: title })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Owned by me" }).getByRole("link", { name: title })).toBeVisible();
   await page.goBack();
   await expect(page.getByLabel("Document title")).toHaveValue(title);
   await expect(page).toHaveTitle(`${title} · Solara Docs`);
   await page.goForward();
-  await expect(page.getByRole("link", { name: title })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Owned by me" }).getByRole("link", { name: title })).toBeVisible();
 
   // A deep link loads directly (dev server / Render rewrite serve index.html).
   await page.goto(path);

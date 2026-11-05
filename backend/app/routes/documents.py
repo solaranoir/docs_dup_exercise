@@ -6,12 +6,22 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser
 from app.content import ContentError, validate_content
 from app.db import get_db
-from app.models import EMPTY_DOC, Attachment, Document, DocumentGrant, User, utcnow
+from app.models import (
+    EMPTY_DOC,
+    Attachment,
+    Document,
+    DocumentGrant,
+    DocumentVisit,
+    User,
+    utcnow,
+)
 from app.policy import Permission, can_delete, can_edit, can_read, permission_for
 from app.storage import Storage, StorageError, optional_storage
 
@@ -70,32 +80,41 @@ class DocumentSummary(BaseModel):
     revision: int
     owner: OwnerOut
     permission: Permission
+    created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None
+    # When the *caller* last opened it; drives "Recently opened" (DOC-022).
+    last_opened_at: datetime | None = None
 
 
 class DocumentOut(DocumentSummary):
     content_json: dict[str, Any]
-    created_at: datetime
 
 
-def _summary(doc: Document, owner: User, permission: Permission) -> DocumentSummary:
+def _summary(
+    doc: Document, owner: User, permission: Permission, last_opened_at: datetime | None = None
+) -> DocumentSummary:
     return DocumentSummary(
         id=doc.id,
         title=doc.title,
         revision=doc.revision,
         owner=OwnerOut(id=owner.id, display_name=owner.display_name),
         permission=permission,
+        created_at=doc.created_at,
         updated_at=doc.updated_at,
+        archived_at=doc.archived_at,
+        last_opened_at=last_opened_at,
     )
 
 
-def document_out(db: Session, doc: Document, permission: Permission) -> DocumentOut:
+def document_out(
+    db: Session, doc: Document, permission: Permission, last_opened_at: datetime | None = None
+) -> DocumentOut:
     owner = db.get(User, doc.owner_id)
     assert owner is not None
     return DocumentOut(
-        **_summary(doc, owner, permission).model_dump(),
+        **_summary(doc, owner, permission, last_opened_at).model_dump(),
         content_json=doc.content_json,
-        created_at=doc.created_at,
     )
 
 
@@ -109,21 +128,42 @@ def load_document(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document,
     return doc, permission
 
 
+def _record_visit(db: Session, user: User, doc: Document) -> datetime:
+    """Upsert the caller's last-opened time (idempotent under concurrent opens)."""
+    now = utcnow()
+    values = {"user_id": user.id, "document_id": doc.id, "last_opened_at": now}
+    insert = pg_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
+    stmt = insert(DocumentVisit).values(**values)
+    db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["user_id", "document_id"], set_={"last_opened_at": now}
+        )
+    )
+    db.commit()
+    return now
+
+
 @router.get("")
-def list_documents(user: CurrentUser, db: DB) -> list[DocumentSummary]:
+def list_documents(user: CurrentUser, db: DB, archived: bool = False) -> list[DocumentSummary]:
+    """The caller's own and shared documents; archived ones only with ``?archived=true``."""
+    visit = DocumentVisit.last_opened_at
+    visit_join = (DocumentVisit.document_id == Document.id) & (DocumentVisit.user_id == user.id)
+    state = Document.archived_at.is_not(None) if archived else Document.archived_at.is_(None)
     owned = db.execute(
-        select(Document, User)
+        select(Document, User, visit)
         .join(User, User.id == Document.owner_id)
-        .where(Document.owner_id == user.id)
+        .outerjoin(DocumentVisit, visit_join)
+        .where(Document.owner_id == user.id, state)
     ).all()
     shared = db.execute(
-        select(Document, User, DocumentGrant.role)
+        select(Document, User, DocumentGrant.role, visit)
         .join(DocumentGrant, DocumentGrant.document_id == Document.id)
         .join(User, User.id == Document.owner_id)
-        .where(DocumentGrant.grantee_id == user.id)
+        .outerjoin(DocumentVisit, visit_join)
+        .where(DocumentGrant.grantee_id == user.id, state)
     ).all()
-    items = [_summary(d, o, "owner") for d, o in owned]
-    items += [_summary(d, o, "editor" if r == "editor" else "viewer") for d, o, r in shared]
+    items = [_summary(d, o, "owner", v) for d, o, v in owned]
+    items += [_summary(d, o, "editor" if r == "editor" else "viewer", v) for d, o, r, v in shared]
     return sorted(items, key=lambda s: s.updated_at, reverse=True)
 
 
@@ -138,7 +178,7 @@ def create_document(body: DocumentCreate, user: CurrentUser, db: DB) -> Document
 @router.get("/{doc_id}")
 def get_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
     doc, permission = load_document(db, user, doc_id)
-    return document_out(db, doc, permission)
+    return document_out(db, doc, permission, _record_visit(db, user, doc))
 
 
 @router.patch("/{doc_id}")
@@ -159,7 +199,65 @@ def load_editable(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document,
     doc, permission = load_document(db, user, doc_id)
     if not can_edit(permission):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You have view-only access")
+    if doc.archived_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "This document is archived. Restore it to make changes."
+        )
     return doc, permission
+
+
+def _load_owned(db: Session, user: User, doc_id: uuid.UUID) -> Document:
+    doc, permission = load_document(db, user, doc_id)
+    if not can_delete(permission):  # owner-only, like delete
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can archive or restore")
+    return doc
+
+
+@router.post("/{doc_id}/archive")
+def archive_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
+    """Hide from everyone's lists and make read-only (DOC-021). Idempotent; revision unchanged."""
+    doc = _load_owned(db, user, doc_id)
+    if doc.archived_at is None:
+        _set_archived(db, doc, utcnow())
+    return document_out(db, doc, "owner")
+
+
+@router.post("/{doc_id}/restore")
+def restore_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
+    doc = _load_owned(db, user, doc_id)
+    if doc.archived_at is not None:
+        _set_archived(db, doc, None)
+    return document_out(db, doc, "owner")
+
+
+def _set_archived(db: Session, doc: Document, when: datetime | None) -> None:
+    # Explicit UPDATE so the ORM's onupdate doesn't treat archiving as an edit (updated_at).
+    db.execute(
+        update(Document)
+        .where(Document.id == doc.id)
+        .values(archived_at=when, updated_at=Document.updated_at)
+    )
+    db.commit()
+    db.refresh(doc)
+
+
+def copy_title(title: str) -> str:
+    return f"Copy of {title}"[:TITLE_MAX].rstrip()
+
+
+@router.post("/{doc_id}/duplicate", status_code=status.HTTP_201_CREATED)
+def duplicate_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
+    """Anyone who can read a document can copy it into a new document they own (DOC-020).
+
+    Title and content are copied; attachments, sharing and archive state are not.
+    """
+    source, _ = load_document(db, user, doc_id)
+    copy = Document(
+        owner_id=user.id, title=copy_title(source.title), content_json=source.content_json
+    )
+    db.add(copy)
+    db.commit()
+    return document_out(db, copy, "owner")
 
 
 def apply_update(

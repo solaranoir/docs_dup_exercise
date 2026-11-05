@@ -25,12 +25,16 @@ export interface DocumentSummary {
   revision: number;
   owner: { id: number; display_name: string };
   permission: Permission;
+  created_at: string;
   updated_at: string;
+  /** Set when the owner archived it (DOC-021): hidden from lists and read-only. */
+  archived_at: string | null;
+  /** When the signed-in user last opened it (DOC-022). */
+  last_opened_at: string | null;
 }
 
 export interface DocumentFull extends DocumentSummary {
   content_json: JSONContent;
-  created_at: string;
 }
 
 export interface ImportPreview {
@@ -99,7 +103,11 @@ export const api = {
   demoUsers: () => request<DemoUser[]>("GET", "/api/demo/users"),
   login: (login_key: string) => request<{ user: User }>("POST", "/api/demo/login", { login_key }),
   logout: () => request<void>("POST", "/api/auth/logout"),
-  listDocuments: () => request<DocumentSummary[]>("GET", "/api/documents"),
+  listDocuments: (archived = false) =>
+    request<DocumentSummary[]>("GET", archived ? "/api/documents?archived=true" : "/api/documents"),
+  archiveDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/archive`),
+  restoreDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/restore`),
+  duplicateDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/duplicate`),
   createDocument: (title?: string) =>
     request<DocumentFull>("POST", "/api/documents", title ? { title } : {}),
   getDocument: (id: string) => request<DocumentFull>("GET", `/api/documents/${id}`),

@@ -30,6 +30,10 @@ CASES = [
     Case("GET", "/api/documents/{doc_id}", (200, 200, 404, 401)),
     Case("PATCH", "/api/documents/{doc_id}", (200, 403, 404, 401), "json-title"),
     Case("DELETE", "/api/documents/{doc_id}", (204, 403, 404, 401)),
+    Case("POST", "/api/documents/{doc_id}/archive", (200, 403, 404, 401)),
+    Case("POST", "/api/documents/{doc_id}/restore", (200, 403, 404, 401)),
+    # Any reader may copy into a document they own; the source is untouched.
+    Case("POST", "/api/documents/{doc_id}/duplicate", (201, 201, 404, 401)),
     Case("POST", "/api/documents/{doc_id}/imports", (200, 403, 404, 401), "import"),
     Case("GET", "/api/documents/{doc_id}/attachments", (200, 200, 404, 401)),
     Case("POST", "/api/documents/{doc_id}/attachments", (201, 403, 404, 401), "upload"),
