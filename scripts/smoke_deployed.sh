@@ -4,6 +4,11 @@
 #
 #   scripts/smoke_deployed.sh [WEB_URL] [API_URL] [EXPECTED_COMMIT]
 #
+# Production has no demo sign-in. To run the authenticated journey there, sign in in a browser,
+# copy the __Host-sd_session cookie value (DevTools → Application → Cookies), and pass it:
+#   SMOKE_SESSION=<value> scripts/smoke_deployed.sh
+# Sharing checks need the seeded demo identities, so they run only where demo sign-in is on.
+#
 # EXPECTED_COMMIT (optional, prefix ok) guards against a deploy that reports "live" but serves
 # stale code (#30). Exit code 0 = all checks passed.
 set -euo pipefail
@@ -52,20 +57,28 @@ expect "cross-site upload blocked" 403 "$(code -H 'Origin: https://evil.example'
 demo_status="$(code "$WEB/api/demo/users")"
 if [[ "$demo_status" == 404 ]]; then
   pass "demo sign-in disabled (production)"
-  # The authenticated journey needs real sign-in; it returns with the OAuth cut-over (PR 6).
-  if (( FAILURES )); then echo "$FAILURES check(s) failed"; exit 1; fi
-  echo "All checks passed (authenticated journey skipped: demo sign-in is disabled)"
-  exit 0
+  expect "sign-in providers offered" yes "$(curl -s -m 60 "$WEB/api/auth/methods" \
+    | json '["providers"] and "yes" or "no"')"
+  if [[ -z "${SMOKE_SESSION:-}" ]]; then
+    if (( FAILURES )); then echo "$FAILURES check(s) failed"; exit 1; fi
+    echo "All checks passed (authenticated journey skipped: set SMOKE_SESSION to run it)"
+    exit 0
+  fi
+  MODE=production
+  echo "Session (SMOKE_SESSION)"
+  A=(-H "Cookie: __Host-sd_session=$SMOKE_SESSION")
+  expect "signed in" 200 "$(code "${A[@]}" "$WEB/api/me")"
+else
+  expect "demo users listed (non-production)" 200 "$demo_status"
+  MODE=demo
+  echo "Sessions (via $WEB/api)"
+  for user in alice bob charlie; do
+    expect "login $user" 200 "$(code -c "$TMP/$user" -X POST "$WEB/api/demo/login" \
+      -H 'content-type: application/json' -d "{\"login_key\":\"$user\"}")"
+  done
+  A=(-b "$TMP/alice"); B=(-b "$TMP/bob"); C=(-b "$TMP/charlie")
+  bob_id="$(curl -s "${B[@]}" "$WEB/api/me" | json '["id"]')"
 fi
-expect "demo users listed (non-production)" 200 "$demo_status"
-
-echo "Sessions (via $WEB/api)"
-for user in alice bob charlie; do
-  expect "login $user" 200 "$(code -c "$TMP/$user" -X POST "$WEB/api/demo/login" \
-    -H 'content-type: application/json' -d "{\"login_key\":\"$user\"}")"
-done
-A=(-b "$TMP/alice"); B=(-b "$TMP/bob"); C=(-b "$TMP/charlie")
-bob_id="$(curl -s "${B[@]}" "$WEB/api/me" | json '["id"]')"
 
 echo "Documents + import"
 expect "import preview (.docx)" 200 "$(code "${A[@]}" -F "file=@$FIXTURES/sample.docx" "$WEB/api/imports")"
@@ -82,6 +95,7 @@ att="$(curl -s "${A[@]}" -F "file=@$FIXTURES/sample.txt" "$WEB/api/documents/$do
 curl -s "${A[@]}" -o "$TMP/download" "$WEB/api/documents/$doc/attachments/$att"
 cmp -s "$TMP/download" "$FIXTURES/sample.txt" && pass "download is byte-identical" || fail "download differs"
 
+if [[ "$MODE" == demo ]]; then
 echo "Sharing"
 expect "grant Bob viewer" 201 "$(code "${A[@]}" -H 'content-type: application/json' \
   -d '{"email":"bob@demo.test"}' "$WEB/api/documents/$doc/grants")"
@@ -92,6 +106,7 @@ expect "Bob cannot edit" 403 "$(code "${B[@]}" -X PATCH -H 'content-type: applic
 expect "Charlie denied" 404 "$(code "${C[@]}" "$WEB/api/documents/$doc")"
 expect "revoke Bob" 204 "$(code "${A[@]}" -X DELETE "$WEB/api/documents/$doc/grants/$bob_id")"
 expect "Bob denied after revoke" 404 "$(code "${B[@]}" "$WEB/api/documents/$doc")"
+fi
 
 echo "Invalid input"
 printf 'MZ' > "$TMP/x.exe"
