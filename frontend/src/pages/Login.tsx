@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { api, type User } from "../api";
+import { api, ApiError, type DemoUser, type User } from "../api";
 
 export function Login({ onLogin }: { onLogin: (user: User) => void }) {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<DemoUser[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.demoUsers().then(setUsers, (e: Error) => setError(e.message));
+    api.demoUsers().then(setUsers, (e: Error) =>
+      // 404 = demo sign-in is switched off (always, in production) until OAuth sign-in ships.
+      setError(e instanceof ApiError && e.status === 404 ? "Sign-in is not available yet." : e.message),
+    );
   }, []);
 
   return (

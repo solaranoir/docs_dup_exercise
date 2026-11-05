@@ -40,6 +40,25 @@ expect "database" ok "$(echo "$ready" | json '["database"]')"
 expect "storage" ok "$(echo "$ready" | json '.get("storage")')"
 expect "static site /" 200 "$(code "$WEB/")"
 
+echo "Security (via $WEB/api)"
+expect "anonymous /api/me" 401 "$(code "$WEB/api/me")"
+expect "anonymous write, same origin" 401 "$(code -X POST -H "Origin: $WEB" \
+  -H 'content-type: application/json' -d '{}' "$WEB/api/documents")"
+expect "cross-site write blocked" 403 "$(code -X POST -H 'Origin: https://evil.example' \
+  -H 'content-type: application/json' -d '{}' "$WEB/api/documents")"
+expect "cross-site upload blocked" 403 "$(code -H 'Origin: https://evil.example' \
+  -F "file=@$FIXTURES/sample.txt" "$WEB/api/imports")"
+
+demo_status="$(code "$WEB/api/demo/users")"
+if [[ "$demo_status" == 404 ]]; then
+  pass "demo sign-in disabled (production)"
+  # The authenticated journey needs real sign-in; it returns with the OAuth cut-over (PR 6).
+  if (( FAILURES )); then echo "$FAILURES check(s) failed"; exit 1; fi
+  echo "All checks passed (authenticated journey skipped: demo sign-in is disabled)"
+  exit 0
+fi
+expect "demo users listed (non-production)" 200 "$demo_status"
+
 echo "Sessions (via $WEB/api)"
 for user in alice bob charlie; do
   expect "login $user" 200 "$(code -c "$TMP/$user" -X POST "$WEB/api/demo/login" \
