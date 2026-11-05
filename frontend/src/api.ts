@@ -47,6 +47,7 @@ export interface Attachment {
 export interface Grant {
   user_id: number;
   display_name: string;
+  email: string | null;
   role: string;
   created_at: string;
 }
@@ -119,8 +120,8 @@ export const api = {
     `${BASE}/api/documents/${id}/attachments/${attachmentId}`,
 
   listGrants: (id: string) => request<Grant[]>("GET", `/api/documents/${id}/grants`),
-  grant: (id: string, user_id: number) =>
-    request<Grant>("POST", `/api/documents/${id}/grants`, { user_id, role: "viewer" }),
+  grant: (id: string, email: string) =>
+    request<Grant>("POST", `/api/documents/${id}/grants`, { email, role: "viewer" }),
   revoke: (id: string, user_id: number) =>
     request<void>("DELETE", `/api/documents/${id}/grants/${user_id}`),
 };

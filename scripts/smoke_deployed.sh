@@ -84,7 +84,7 @@ cmp -s "$TMP/download" "$FIXTURES/sample.txt" && pass "download is byte-identica
 
 echo "Sharing"
 expect "grant Bob viewer" 201 "$(code "${A[@]}" -H 'content-type: application/json' \
-  -d "{\"user_id\":$bob_id}" "$WEB/api/documents/$doc/grants")"
+  -d '{"email":"bob@demo.test"}' "$WEB/api/documents/$doc/grants")"
 expect "Bob reads" 200 "$(code "${B[@]}" "$WEB/api/documents/$doc")"
 expect "Bob downloads" 200 "$(code "${B[@]}" "$WEB/api/documents/$doc/attachments/$att")"
 expect "Bob cannot edit" 403 "$(code "${B[@]}" -X PATCH -H 'content-type: application/json' \

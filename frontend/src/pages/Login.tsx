@@ -12,21 +12,46 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
     );
   }, []);
 
+  const nothingAvailable = methods !== null && methods.providers.length === 0 && !methods.demo;
+
   return (
     <main className="login">
       <h1>Solara Docs</h1>
-      <p>Demo sign-in — choose a seeded identity.</p>
+      <p>Technical notes, field logs and experiments for Solara Radio.</p>
       {error && <p role="alert">{error}</p>}
-      <ul className="login-users">
-        {users.map((u) => (
-          <li key={u.id}>
-            <button type="button" onClick={async () => onLogin((await api.login(u.login_key)).user)}>
-              {u.display_name}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="hint">Demo identities only — not secure for public use.</p>
+      {methods === null && !error && <p className="loading">Loading…</p>}
+
+      {methods && methods.providers.length > 0 && (
+        <ul className="login-users" aria-label="Sign in with">
+          {methods.providers.map((p) => (
+            <li key={p.name}>
+              {/* Full-page navigation: the API redirects to the provider and back. */}
+              <a className="login-provider" href={api.signInUrl(p.name)}>
+                Sign in with {p.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {methods && methods.providers.length > 0 && <p className="hint">Invite only during the preview.</p>}
+
+      {nothingAvailable && <p>Sign-in is not available yet.</p>}
+
+      {methods?.demo && demoUsers.length > 0 && (
+        <section aria-labelledby="demo-heading">
+          <h2 id="demo-heading">Demo identities</h2>
+          <ul className="login-users">
+            {demoUsers.map((u) => (
+              <li key={u.id}>
+                <button type="button" onClick={async () => onLogin((await api.login(u.login_key)).user)}>
+                  {u.display_name}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="hint">Local development only — never available in production.</p>
+        </section>
+      )}
     </main>
   );
 }

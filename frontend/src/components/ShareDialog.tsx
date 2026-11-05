@@ -1,75 +1,99 @@
-import { useEffect, useState } from "react";
-import { api, type Grant, type User } from "../api";
+import { useEffect, useState, type FormEvent } from "react";
+import { api, type Grant } from "../api";
 import { Modal } from "./Modal";
 
-/** Owner-only. MVP sharing is view-only with existing seeded accounts (decision #7). */
+/** Owner-only. View-only sharing (decision #7) with existing accounts, by email (ADR-009). */
 export function ShareDialog({
   open,
   onClose,
   documentId,
-  ownerId,
 }: {
   open: boolean;
   onClose: () => void;
   documentId: string;
-  ownerId: number;
 }) {
-  const [users, setUsers] = useState<User[]>([]);
   const [grants, setGrants] = useState<Grant[]>([]);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    Promise.all([api.demoUsers(), api.listGrants(documentId)]).then(
-      ([u, g]) => {
-        setUsers(u.filter((x) => x.id !== ownerId));
-        setGrants(g);
-      },
-      (e: Error) => setError(e.message),
-    );
-  }, [open, documentId, ownerId]);
+    api.listGrants(documentId).then(setGrants, (e: Error) => setError(e.message));
+  }, [open, documentId]);
 
-  const toggle = async (user: User, hasAccess: boolean) => {
+  const share = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const grant = await api.grant(documentId, email.trim());
+      setGrants((g) => [...g.filter((x) => x.user_id !== grant.user_id), grant]);
+      setEmail("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (grant: Grant) => {
     setError(null);
     try {
-      if (hasAccess) {
-        await api.revoke(documentId, user.id);
-        setGrants((g) => g.filter((x) => x.user_id !== user.id));
-      } else {
-        const grant = await api.grant(documentId, user.id);
-        setGrants((g) => [...g.filter((x) => x.user_id !== user.id), grant]);
-      }
+      await api.revoke(documentId, grant.user_id);
+      setGrants((g) => g.filter((x) => x.user_id !== grant.user_id));
     } catch (e) {
       setError((e as Error).message);
     }
   };
 
+  const close = () => {
+    setError(null); // a stale error shouldn't greet the next opening
+    onClose();
+  };
+
   return (
-    <Modal title="Share document" open={open} onClose={onClose}>
+    <Modal title="Share document" open={open} onClose={close}>
       <p className="hint">People you share with can view this document and its attachments, but not edit.</p>
       {error && (
         <p role="alert" className="notice notice-error">
           {error}
         </p>
       )}
-      <ul className="share-list">
-        {users.map((u) => {
-          const hasAccess = grants.some((g) => g.user_id === u.id);
-          return (
-            <li key={u.id}>
-              <span>{u.display_name}</span>
-              {hasAccess && <span className="badge badge-viewer">Viewer</span>}
-              <button
-                type="button"
-                className={hasAccess ? undefined : "primary"}
-                onClick={() => void toggle(u, hasAccess)}
-              >
-                {hasAccess ? `Revoke ${u.display_name}` : `Share with ${u.display_name}`}
+      <form className="share-form" onSubmit={(e) => void share(e)}>
+        <label htmlFor="share-email">Email address</label>
+        <input
+          id="share-email"
+          type="email"
+          autoComplete="off"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="name@example.com"
+          required
+        />
+        <button type="submit" className="primary" disabled={busy}>
+          Share
+        </button>
+      </form>
+      {grants.length === 0 ? (
+        <p className="hint">Not shared with anyone yet.</p>
+      ) : (
+        <ul className="share-list" aria-label="People with access">
+          {grants.map((g) => (
+            <li key={g.user_id}>
+              <span>
+                {g.display_name}
+                {g.email && <span className="hint"> · {g.email}</span>}
+              </span>
+              <span className="badge badge-viewer">Viewer</span>
+              <button type="button" onClick={() => void revoke(g)}>
+                Revoke {g.display_name}
               </button>
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      )}
     </Modal>
   );
 }

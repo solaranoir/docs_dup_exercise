@@ -9,7 +9,7 @@ const NAMES: Record<DemoUser, string> = {
 
 async function switchTo(page: Page, user: DemoUser) {
   await page.goto("/#/");
-  await page.getByRole("button", { name: "Switch user" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: NAMES[user] }).click();
   await expect(page.getByText(`Signed in as ${NAMES[user]}`)).toBeVisible();
 }
@@ -31,8 +31,14 @@ test("Alice shares with Bob (read-only), Charlie is denied, revoke removes acces
 
   await page.getByRole("button", { name: "Share" }).click();
   const share = page.getByRole("dialog", { name: "Share document" });
-  await share.getByRole("button", { name: `Share with ${NAMES.bob}` }).click();
+  // No user directory: an unknown email is refused with guidance, a known one is shared.
+  await share.getByLabel("Email address").fill("stranger@example.com");
+  await share.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(share.getByRole("alert")).toContainText("sign in once");
+  await share.getByLabel("Email address").fill("Bob@demo.test");
+  await share.getByRole("button", { name: "Share", exact: true }).click();
   await expect(share.getByRole("button", { name: `Revoke ${NAMES.bob}` })).toBeVisible();
+  await expect(share.getByText("bob@demo.test")).toBeVisible();
   await share.getByRole("button", { name: "Close" }).click();
 
   // Bob sees it under Shared with me and can only read.
@@ -55,7 +61,7 @@ test("Alice shares with Bob (read-only), Charlie is denied, revoke removes acces
     data: { expected_revision: 2, title: "Bob was here" },
   });
   expect(patch.status()).toBe(403);
-  const reshare = await page.request.post(`/api/documents/${id}/grants`, { data: { user_id: 3 } });
+  const reshare = await page.request.post(`/api/documents/${id}/grants`, { data: { email: "charlie@demo.test" } });
   expect(reshare.status()).toBe(403);
 
   // Charlie cannot read it, via UI or API.
@@ -70,7 +76,8 @@ test("Alice shares with Bob (read-only), Charlie is denied, revoke removes acces
   await page.goto(url);
   await page.getByRole("button", { name: "Share" }).click();
   await page.getByRole("button", { name: `Revoke ${NAMES.bob}` }).click();
-  await expect(page.getByRole("button", { name: `Share with ${NAMES.bob}` })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Revoke ${NAMES.bob}` })).toHaveCount(0);
+  await expect(page.getByText("Not shared with anyone yet.")).toBeVisible();
 
   await switchTo(page, "bob");
   await expect(page.getByRole("link", { name: title })).toHaveCount(0);
