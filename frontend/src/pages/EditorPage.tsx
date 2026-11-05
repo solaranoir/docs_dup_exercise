@@ -9,6 +9,7 @@ import { Toolbar } from "../components/Toolbar";
 import { normalizeContent } from "../content";
 import { extensions } from "../editorExtensions";
 import { navigate, navigationGuard } from "../router";
+import { useDocumentTitle } from "../useDocumentTitle";
 
 export function EditorPage({ id }: { id: string }) {
   const [doc, setDoc] = useState<DocumentFull | null>(null);
@@ -37,6 +38,7 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
   const [importOpen, setImportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [title, setTitle] = useState(initial.title);
+  useDocumentTitle(title || "Untitled document");
   const [revision, setRevision] = useState(initial.revision);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [message, setMessage] = useState<string | null>(null);

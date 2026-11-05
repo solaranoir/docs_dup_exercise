@@ -30,6 +30,17 @@ describe("Login", () => {
     expect(demoUsers).not.toHaveBeenCalled();
   });
 
+  it("links back to Solara Radio and titles the tab", async () => {
+    vi.spyOn(api, "authMethods").mockResolvedValue({ providers: [], demo: false });
+    render(<Login onLogin={() => {}} />);
+    expect(screen.getByRole("link", { name: "Back to Solara Radio Tools" })).toHaveAttribute(
+      "href",
+      "https://solararadio.netlify.app/tools",
+    );
+    expect(document.title).toBe("Sign in · Solara Docs");
+    await screen.findByText("Sign-in is not available yet.");
+  });
+
   it("shows demo identities only when the server enables them", async () => {
     vi.spyOn(api, "authMethods").mockResolvedValue({ providers: [], demo: true });
     vi.spyOn(api, "demoUsers").mockResolvedValue([
