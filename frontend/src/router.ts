@@ -44,6 +44,27 @@ export function useRoute(): Route {
   return parseRoute(pathname);
 }
 
+/** The current URL query (e.g. ?folder=3&tag=pota), re-rendering on navigation. */
+export function useSearchParams(): URLSearchParams {
+  const search = useSyncExternalStore(subscribe, () => window.location.search);
+  return new URLSearchParams(search);
+}
+
+/**
+ * Update the query in place (filters are view state: replace, don't add history entries).
+ * Empty values are dropped.
+ */
+export function setSearchParams(values: Record<string, string | null>): void {
+  const params = new URLSearchParams(window.location.search);
+  for (const [key, value] of Object.entries(values)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const query = params.toString();
+  window.history.replaceState(window.history.state, "", window.location.pathname + (query ? `?${query}` : ""));
+  window.dispatchEvent(new Event(NAVIGATE_EVENT));
+}
+
 /** Set by the editor while it has unsaved edits, so in-app navigation can ask first. */
 export const navigationGuard = { dirty: false };
 

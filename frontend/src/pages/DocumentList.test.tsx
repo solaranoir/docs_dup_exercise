@@ -1,8 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type DocumentSummary } from "../api";
-import { DocumentList, recentlyOpened, sortDocuments } from "./DocumentList";
+import { applyFilters, DocumentList, recentlyOpened, sortDocuments } from "./DocumentList";
 
 const doc = (over: Partial<DocumentSummary>): DocumentSummary => ({
   id: "d1",
@@ -14,12 +14,18 @@ const doc = (over: Partial<DocumentSummary>): DocumentSummary => ({
   updated_at: "2026-11-05T12:00:00Z",
   archived_at: null,
   last_opened_at: null,
+  folder_id: null,
+  tags: [],
   ...over,
 });
 
+beforeEach(() => {
+  vi.spyOn(api, "listFolders").mockResolvedValue([]);
+});
 afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
 });
 
 const a = doc({
@@ -195,5 +201,57 @@ describe("DocumentList", () => {
         screen.getByRole("region", { name: "Owned by me" }),
       ).findByRole("link", { name: "Old field day" }),
     ).toBeInTheDocument();
+  });
+
+  it("filters by folder and tag through the URL and can clear them", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "listFolders").mockResolvedValue([{ id: 7, name: "2026 POTA", document_count: 1 }]);
+    vi.spyOn(api, "listDocuments").mockResolvedValue([
+      doc({ id: "p", title: "K-4389 plan", folder_id: 7, tags: ["cw", "pota"] }),
+      doc({ id: "s", title: "AO-91 pass", tags: ["satellite"] }),
+      doc({ id: "n", title: "Loose note" }),
+    ]);
+    render(<DocumentList />);
+    const owned = () => within(screen.getByRole("region", { name: "Owned by me" }));
+    await screen.findByRole("link", { name: "Loose note" });
+    expect(await owned().findByText("2026 POTA")).toBeInTheDocument(); // folder shown on its row
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "7");
+    expect(window.location.search).toBe("?folder=7");
+    expect(owned().getAllByRole("link").map((l) => l.textContent)).toEqual(["K-4389 plan"]);
+    expect(screen.queryByRole("region", { name: "Recently opened" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "unfiled");
+    await user.click(screen.getByRole("button", { name: "satellite" }));
+    expect(new URLSearchParams(window.location.search).get("tag")).toBe("satellite");
+    expect(owned().getAllByRole("link").map((l) => l.textContent)).toEqual(["AO-91 pass"]);
+    expect(screen.getByRole("button", { name: "satellite" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "cw" }));
+    expect(owned().getByText("No documents match these filters.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(window.location.search).toBe("");
+    expect(owned().getAllByRole("link")).toHaveLength(3);
+  });
+
+  it("ignores a folder id from the URL that the user does not have", async () => {
+    window.history.replaceState(null, "", "/?folder=999");
+    vi.spyOn(api, "listDocuments").mockResolvedValue([doc({ title: "Kept" })]);
+    render(<DocumentList />);
+    expect(await screen.findByRole("link", { name: "Kept" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Folder" })).toHaveValue("");
+  });
+});
+
+describe("applyFilters", () => {
+  it("combines folder and tag", () => {
+    const docs = [
+      doc({ id: "1", folder_id: 1, tags: ["x"] }),
+      doc({ id: "2", folder_id: 1 }),
+      doc({ id: "3", tags: ["x"] }),
+    ];
+    expect(ids(applyFilters(docs, "1", null))).toEqual(["1", "2"]);
+    expect(ids(applyFilters(docs, "unfiled", "x"))).toEqual(["3"]);
+    expect(ids(applyFilters(docs, null, "x"))).toEqual(["1", "3"]);
   });
 });

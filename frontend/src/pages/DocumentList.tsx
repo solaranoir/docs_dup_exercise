@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { api, type DocumentSummary } from "../api";
+import { api, type DocumentSummary, type Folder } from "../api";
+import { FoldersDialog } from "../components/FoldersDialog";
 import { Link } from "../components/Link";
-import { navigate, paths } from "../router";
+import { navigate, paths, setSearchParams, useSearchParams } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
 
 const ImportDialog = lazy(() =>
@@ -94,12 +95,15 @@ function Section({
   empty,
   when,
   action,
+  folderNames,
 }: {
   title: string;
   docs: DocumentSummary[];
   empty?: string;
   when: When;
   action?: (doc: DocumentSummary) => ReactNode;
+  /** When given, each row shows the name of the user's folder for it. */
+  folderNames?: Map<number, string>;
 }) {
   // aria-labelledby takes a space-separated id list, so the id must not contain spaces.
   const headingId = `h-${title.toLowerCase().replace(/\W+/g, "-")}`;
@@ -117,6 +121,23 @@ function Section({
                 <span className={`badge badge-${d.permission}`}>
                   {d.permission === "viewer" ? "View only" : "Can edit"} ·{" "}
                   {d.owner.display_name}
+                </span>
+              )}
+              {folderNames && d.folder_id !== null && folderNames.has(d.folder_id) && (
+                <span className="doc-folder">
+                  <span aria-hidden="true">▤ </span>
+                  <span className="visually-hidden">Folder: </span>
+                  {folderNames.get(d.folder_id)}
+                </span>
+              )}
+              {d.tags.length > 0 && (
+                <span className="doc-tags">
+                  <span className="visually-hidden">Tags: </span>
+                  {d.tags.map((t) => (
+                    <span key={t} className="tag">
+                      {t}
+                    </span>
+                  ))}
                 </span>
               )}
               <DocTime doc={d} when={when} />
@@ -221,14 +242,33 @@ function Onboarding() {
   );
 }
 
+/** ``?folder=<id>|unfiled&tag=<tag>`` (ADR-010). Unknown folder ids are ignored. */
+export function applyFilters(
+  docs: DocumentSummary[],
+  folder: string | null,
+  tag: string | null,
+): DocumentSummary[] {
+  return docs.filter(
+    (d) =>
+      (folder === null ||
+        (folder === "unfiled" ? d.folder_id === null : d.folder_id === Number(folder))) &&
+      (tag === null || d.tags.includes(tag)),
+  );
+}
+
 export function DocumentList() {
   useDocumentTitle("My Documents");
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useSortPreference();
 
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [foldersOpen, setFoldersOpen] = useState(false);
+  const params = useSearchParams();
+
   const load = useCallback(() => {
     api.listDocuments().then(setDocs, (e: Error) => setError(e.message));
+    api.listFolders().then(setFolders, () => setFolders([]));
   }, []);
   useEffect(load, [load]);
 
@@ -241,10 +281,23 @@ export function DocumentList() {
 
   if (error) return <p role="alert">{error}</p>;
   if (!docs) return <p className="loading">Loading…</p>;
-  const sorted = sortDocuments(docs, sort);
+  const folderNames = new Map(folders.map((f) => [f.id, f.name]));
+  const folderParam = params.get("folder");
+  const folder =
+    folderParam === "unfiled" || (folderParam !== null && folderNames.has(Number(folderParam)))
+      ? folderParam
+      : null;
+  const tag = params.get("tag");
+  const filtering = folder !== null || tag !== null;
+  const tagsInUse = [...new Set(docs.flatMap((d) => d.tags))].sort();
+
+  const sorted = sortDocuments(applyFilters(docs, folder, tag), sort);
   const owned = sorted.filter((d) => d.permission === "owner");
+  const ownsAny = docs.some((d) => d.permission === "owner");
   const recent = recentlyOpened(docs);
   const when: When = sort === "created" ? "created" : "edited";
+  const clearFilters = () => setSearchParams({ folder: null, tag: null });
+  const noMatch = "No documents match these filters.";
   return (
     <div className="documents">
       <div className="documents-head">
@@ -270,10 +323,35 @@ export function DocumentList() {
           />
         </Suspense>
       )}
-      {owned.length === 0 && <Onboarding />}
-      {recent.length > 0 && <Section title="Recently opened" docs={recent} when="opened" />}
-      {docs.length > 1 && (
-        <div className="list-controls">
+      {!ownsAny && <Onboarding />}
+      {!filtering && recent.length > 0 && (
+        <Section title="Recently opened" docs={recent} when="opened" folderNames={folderNames} />
+      )}
+      <div className="list-controls" role="group" aria-label="Filter and sort">
+        {docs.length > 0 && (
+          <div className="control">
+            {/* Explicit for/id: a <select> nested in its <label> adds its value to the name. */}
+            <label htmlFor="folder-filter">Folder</label>
+            <select
+              id="folder-filter"
+              value={folder ?? ""}
+              onChange={(e) => setSearchParams({ folder: e.target.value || null })}
+            >
+              <option value="">All folders</option>
+              <option value="unfiled">Not in a folder</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {/* Always available, so a new user can set up folders before writing anything. */}
+        <button type="button" className="link-button" onClick={() => setFoldersOpen(true)}>
+          Manage folders
+        </button>
+        {docs.length > 1 && (
           <label>
             Sort by{" "}
             <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
@@ -284,20 +362,43 @@ export function DocumentList() {
               ))}
             </select>
           </label>
-        </div>
-      )}
+        )}
+        {tagsInUse.length > 0 && (
+          <div className="tag-filters" role="group" aria-label="Filter by tag">
+            {tagsInUse.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className="tag tag-filter"
+                aria-pressed={tag === t}
+                onClick={() => setSearchParams({ tag: tag === t ? null : t })}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+        {filtering && (
+          <button type="button" className="link-button" onClick={clearFilters}>
+            Clear filters
+          </button>
+        )}
+      </div>
       <Section
         title="Owned by me"
         docs={owned}
-        empty="No documents yet. Create one to get started."
+        empty={filtering ? noMatch : "No documents yet. Create one to get started."}
         when={when}
+        folderNames={folder === null ? folderNames : undefined}
       />
       <Section
         title="Shared with me"
         docs={sorted.filter((d) => d.permission !== "owner")}
-        empty="Nothing has been shared with you yet."
+        empty={filtering ? noMatch : "Nothing has been shared with you yet."}
         when={when}
+        folderNames={folder === null ? folderNames : undefined}
       />
+      <FoldersDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} folders={folders} onChanged={load} />
       <ArchivedSection onRestored={load} />
     </div>
   );
