@@ -12,7 +12,7 @@ test("import .txt as a new document", async ({ page }) => {
   await dialog.getByLabel("Title").fill("Imported text");
   await dialog.getByRole("button", { name: "Create document" }).click();
 
-  await expect(page).toHaveURL(/#\/doc\//);
+  await expect(page).toHaveURL(/\/doc\//);
   await expect(page.getByLabel("Document title")).toHaveValue("Imported text");
   await expect(page.getByLabel("Document body")).toContainText("Second paragraph after a blank line.");
 });

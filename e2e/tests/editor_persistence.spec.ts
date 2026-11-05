@@ -38,7 +38,7 @@ test("create → format → save → refresh → reopen keeps structure", async 
   await expect(body.locator("em")).toHaveText("italic");
   await expect(body.locator("ul > li")).toHaveText(["first item", "second item"]);
 
-  await page.getByRole("link", { name: "← Documents" }).click();
+  await page.getByRole("link", { name: "Documents", exact: true }).click();
   const owned = page.getByRole("region", { name: "Owned by me" });
   await expect(owned.getByRole("link", { name: title })).toBeVisible();
 });
@@ -57,9 +57,9 @@ test("Ctrl/Cmd+S saves and in-app navigation warns about unsaved edits", async (
     prompted = true;
     void dialog.dismiss();
   });
-  await page.getByRole("link", { name: "← Documents" }).click();
+  await page.getByRole("link", { name: "Documents", exact: true }).click();
   expect(prompted).toBe(true);
-  await expect(page).toHaveURL(/#\/doc\//);
+  await expect(page).toHaveURL(/\/doc\//);
 });
 
 test("stale save shows a conflict with a recovery path", async ({ page, context }) => {
@@ -90,7 +90,7 @@ test("documents of other users are not reachable", async ({ page }) => {
   const url = await newDocument(page);
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: /^Charlie/ }).click();
-  await expect(page.getByText("Charlie (no access)")).toBeVisible();
+  await expect(page.getByText("Signed in as Charlie (no access)")).toBeVisible();
   await page.goto(url);
   await expect(page.getByRole("alert")).toContainText("not found");
 });

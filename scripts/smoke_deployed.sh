@@ -44,6 +44,8 @@ ready="$(curl -s -m 60 "$API/health/ready")"
 expect "database" ok "$(echo "$ready" | json '["database"]')"
 expect "storage" ok "$(echo "$ready" | json '.get("storage")')"
 expect "static site /" 200 "$(code "$WEB/")"
+expect "deep link /doc/:id serves the app" 200 "$(code "$WEB/doc/00000000-0000-0000-0000-000000000000")"
+expect "unknown /api path still reaches the API" 404 "$(code "$WEB/api/no-such-route")"
 
 echo "Security (via $WEB/api)"
 expect "anonymous /api/me" 401 "$(code "$WEB/api/me")"
