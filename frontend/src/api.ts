@@ -33,6 +33,11 @@ export interface DocumentSummary {
   last_opened_at: string | null;
 }
 
+/** A search hit (DOC-017): plain text around the first body match, or the opening lines. */
+export interface SearchResult extends DocumentSummary {
+  snippet: string | null;
+}
+
 export interface DocumentFull extends DocumentSummary {
   content_json: JSONContent;
 }
@@ -105,6 +110,9 @@ export const api = {
   logout: () => request<void>("POST", "/api/auth/logout"),
   listDocuments: (archived = false) =>
     request<DocumentSummary[]>("GET", archived ? "/api/documents?archived=true" : "/api/documents"),
+  /** Own and shared, unarchived documents matching every word; best first, at most 50. */
+  searchDocuments: (q: string) =>
+    request<SearchResult[]>("GET", `/api/documents/search?q=${encodeURIComponent(q)}`),
   archiveDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/archive`),
   restoreDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/restore`),
   duplicateDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/duplicate`),
