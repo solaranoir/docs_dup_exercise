@@ -1,82 +1,85 @@
-# Document Workspace MVP
+# Solara Docs
 
-Single-user editing + explicit-user sharing workspace: React/Tiptap frontend, FastAPI API,
-PostgreSQL persistence, S3-compatible attachment storage. Demo-quality release with seeded
-identities (Alice, Bob, Charlie) — **not secure for public internet use** (see ADR-004).
+Technical notes, field logs and experiments for [Solara Radio](https://solararadio.netlify.app).
+A private, invite-only document workspace: write formatted documents, import `.txt` / `.md` /
+`.docx`, attach files, and share documents read-only with other members by email.
 
-Status: **Week 4 — Hardening + release** (rate limits, JSON logs, security headers, deploy
-verification, runbook, ADRs). Live demo: https://docworkspace-web.onrender.com
-Plan and task tracking: [docs/PLAN.md](docs/PLAN.md) and the GitHub issues. Operations:
-[docs/RUNBOOK.md](docs/RUNBOOK.md). Release gate: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+**Live:** https://docworkspace-web.onrender.com · reached from Solara Radio → Tools, and links
+back there from every page.
 
-Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-009).
+_README updated 2026-11-04._ The previous MVP README is archived in
+[History and archive](#history-and-archive).
 
-**Next: Solara Docs.** Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Security audit:
-[docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md). v0.5 release gates:
-[docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md). The free database expires around
-**2026-11-28**; see the readiness checklist.
-=======
-Architecture overview: [ARCHITECTURE.md](ARCHITECTURE.md). Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-008).
+## What it does
 
+- **Sign in with GitHub or Google.** Only invited email addresses can sign in (an allowlist kept
+  by the operator). Sessions are server-side, in an HttpOnly cookie.
+- **Write.** Rich-text editor with headings, bold/italic/underline, lists and four text sizes.
+  Saving is explicit (Save button or Ctrl/⌘+S), with an unsaved-changes indicator, a warning
+  before leaving, and conflict detection if the document changed in another tab.
+- **Import** `.txt`, `.md` and `.docx` as a new document, or append/replace into an existing one.
+  A preview lists anything the import cannot keep (tables, images, colours…) before saving.
+- **Attach** files to a document (10 MB each, up to 10 per document), stored privately in
+  Cloudflare R2 and downloaded through the API.
+- **Share** a document read-only with another member by email. There is no user directory: the
+  person must have signed in once. The owner can revoke access at any time.
 
-## Layout
+The interface uses Solara Radio's visual foundation (midnight/gunmetal surfaces, copper and sage
+controls, Georgia headings) and works on phones.
+
+## Stack
+
+React 19 + Tiptap 3 (Vite) · FastAPI · PostgreSQL 16 (documents as JSONB) · Cloudflare R2
+(S3-compatible) · Render (static site + web service + Postgres). The static site rewrites `/api/*`
+to the API, so the browser sees one origin and the session cookie stays first-party.
 
 ```
-backend/        FastAPI app (app/), Alembic migrations, tests, scripts/seed_demo.py
-frontend/       React + Tiptap (Week 2)
-e2e/            Playwright suites (critical journeys)
-docs/           Plan, runbook, release checklist, ADRs
+backend/        FastAPI app (app/), Alembic migrations, tests, scripts/
+frontend/       React + Tiptap single-page app
+e2e/            Playwright journeys
+docs/           Roadmap, runbook, security audit, readiness gates, ADRs, archive
 scripts/        smoke_deployed.sh (post-deploy verification)
 render.yaml     Render Blueprint
 ```
 
-## Local run (backend)
+Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [docs/adr/](docs/adr/) (ADR-001 …
+ADR-009; authentication is [ADR-009](docs/adr/0009-oauth-allowlist-authentication.md)) ·
+Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md) · Operations: [docs/RUNBOOK.md](docs/RUNBOOK.md) ·
+Release gates: [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) · Security audit:
+[docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md)
 
-Prerequisites: Python 3.12+, Node 22+, PostgreSQL 16. Recommended contained setup (no global
-services): [mise](https://mise.jdx.dev) pins Node/Python via `mise.toml`, and Postgres/MinIO run
-in containers (Docker Desktop, OrbStack, or `brew install colima docker docker-compose &&
-colima start`).
+## Run it locally
+
+Prerequisites: Python 3.12+, Node 22+, Docker (Docker Desktop, OrbStack or colima). [mise](https://mise.jdx.dev)
+pins Node and Python via `mise.toml`.
 
 ```bash
-mise install                          # Node 22 + Python 3.12 from mise.toml
-cp .env.example backend/.env          # adjust DATABASE_URL / SESSION_SECRET
-docker-compose up -d db               # or `docker compose`; data in a project-scoped volume
+mise install
+cp .env.example backend/.env          # local defaults, including ENABLE_DEMO_AUTH=true
+docker compose up -d db               # PostgreSQL 16 in a project-scoped volume
+
 cd backend
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.lock && pip install -e . --no-deps   # runtime-only: requirements.lock
+pip install -r requirements-dev.lock && pip install -e . --no-deps
 alembic upgrade head
-python scripts/seed_demo.py           # idempotent
-python -m moto.server -p 9000 &       # local S3-compatible storage for attachments (in-memory)
+python scripts/seed_demo.py           # demo users Alice, Bob, Charlie (only with demo auth on)
+python -m moto.server -p 9000 &       # in-memory S3 for attachments
 uvicorn app.main:app --reload         # http://localhost:8000/docs
-```
 
-Attachments need object storage. Locally the `.env.example` values point at moto; its data is
-in-memory and lost on restart (production uses Cloudflare R2, which is durable). Without
-`STORAGE_BUCKET` the API still runs, and attachment endpoints return 503.
-
-Check: `curl localhost:8000/health/live`, `curl localhost:8000/health/ready` (reports
-`database` and `storage`: `ok`, `error`, or `unconfigured`).
-
-## Local run (frontend)
-
-```bash
-cd frontend
+cd ../frontend
 npm ci
-npm run dev                           # http://localhost:5173, proxies /api to :8000
+npm run dev                           # http://localhost:5173 (proxies /api to :8000)
 ```
 
-Sign in as Alice/Bob/Charlie, then **New document**. Save with the button or Ctrl/Cmd+S.
-Saving is manual: **autosave is not available yet** (planned for a future release, see
-[#27](https://github.com/solaranoir/docs_dup_exercise/issues/27)). The status indicator shows
-unsaved changes, and the app warns before you leave with unsaved edits.
+Locally, the sign-in page offers the demo identities **Alice** (owner), **Bob** (recipient) and
+**Charlie** (no access). Demo sign-in exists only when `ENABLE_DEMO_AUTH=true`; the API refuses
+to start with it in production. To try real OAuth locally, create separate development OAuth
+apps with the callback `http://localhost:5173/api/auth/{github,google}/callback` and fill in the
+`GITHUB_*` / `GOOGLE_*` values.
 
-Demo login (local development and tests only; needs `ENABLE_DEMO_AUTH=true`, which
-`.env.example` sets and production refuses): `POST /api/demo/login {"login_key": "alice"}` starts
-a server-side session in an httpOnly cookie. `GET /api/me` returns the principal, and
-`POST /api/auth/logout` ends the session. Writes from a browser must come from an origin in
-`CORS_ORIGINS` (CSRF check, ADR-009).
+Health: `curl localhost:8000/health/live` and `/health/ready` (reports `database` and `storage`).
 
-## Tests and checks
+## Tests
 
 ```bash
 cd backend  && ruff check . && ruff format --check . && mypy && pytest
@@ -84,67 +87,74 @@ cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 cd e2e      && npm ci && npx playwright install chromium && npx playwright test
 ```
 
-Playwright starts moto (:9000), the API (migrate + seed + uvicorn on :8000) and Vite (:5173)
-itself unless they are already running; it uses `DATABASE_URL` from the environment.
+Run `pytest` against PostgreSQL by setting `TEST_DATABASE_URL` (for example a
+`docworkspace_test` database in the docker container); without it the suite falls back to
+SQLite. Playwright starts moto, the API and Vite itself and uses `DATABASE_URL` from the
+environment, so point it at a scratch database. CI runs all three suites on PostgreSQL 16 for
+every pull request.
 
-`pytest` uses `TEST_DATABASE_URL` when set (PostgreSQL in CI); otherwise a temporary SQLite
-file so the suite runs without a server. CI on every PR runs everything against PostgreSQL 16.
+## Configuration
 
-## Environment variables
+Backend settings live on **docworkspace-api** only; secrets never go on the static site.
 
 | Name | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL URL (`postgres://` is normalised to psycopg driver) |
-| `SESSION_SECRET` | Signs demo sessions; required when `ENVIRONMENT=production` |
-| `ENVIRONMENT` | `development` / `production` (secure cookies, secret check) |
-| `CORS_ORIGINS` | JSON list of allowed browser origins |
-| `STORAGE_ENDPOINT` | S3 API endpoint (R2: `https://<account>.r2.cloudflarestorage.com`; empty = AWS) |
-| `STORAGE_BUCKET` | Private bucket (`document-workspace-attachments` in production) |
-| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | Bucket-scoped credentials; secrets only in Render |
-| `STORAGE_REGION` | `auto` for R2 |
-| `STORAGE_AUTO_CREATE_BUCKET` | Local/CI only; creates the bucket on first use |
+| `ENVIRONMENT` | `development` / `production`. Production enforces https origins, a real `SESSION_SECRET` and demo auth off |
+| `DATABASE_URL` | PostgreSQL URL (`postgres://` is normalised to the psycopg driver) |
+| `SESSION_SECRET` | Signs the short-lived OAuth flow cookie |
+| `CORS_ORIGINS` | JSON list of trusted browser origins, used for CORS and the CSRF origin check |
+| `PUBLIC_BASE_URL` | Public web origin for OAuth callbacks (defaults to the first `CORS_ORIGINS` entry) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub sign-in; the provider appears only when both are set |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in (a *Web application* OAuth client) |
+| `ENABLE_DEMO_AUTH` | Development/tests only: seeded Alice/Bob/Charlie sign-in |
+| `SESSION_IDLE_SECONDS` / `SESSION_ABSOLUTE_SECONDS` | Session lifetime, default 7 days idle / 30 days absolute |
+| `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_REGION` | Private object storage (R2: region `auto`). Without a bucket, attachments return 503 |
+| `STORAGE_AUTO_CREATE_BUCKET` | Local/CI only |
 | `MAX_UPLOAD_BYTES` / `MAX_ATTACHMENTS_PER_DOCUMENT` | Defaults 10 MB / 10 |
 | `LOGIN_RATE_LIMIT_PER_MINUTE` / `UPLOAD_RATE_LIMIT_PER_MINUTE` | Defaults 20 per IP / 30 per user |
-| `LOG_LEVEL` | Default `INFO`; logs are JSON lines with `request_id` |
-| `RENDER_GIT_COMMIT` | Set by Render; reported by `/health/live` |
-| `VITE_API_BASE_URL` | Optional API origin; empty = same origin (`/api` proxied/rewritten) |
+| `LOG_LEVEL` | Default `INFO`; JSON log lines with `request_id` |
+| `VITE_API_BASE_URL` | Frontend build: API origin; empty = same-origin `/api` |
+| `VITE_SOLARA_TOOLS_URL` | Frontend build: "Solara Radio Tools" return link (default `https://solararadio.netlify.app/tools`) |
 
-## Deploy (Render)
+## Operating it
 
-1. Render dashboard → **New → Blueprint** → select this repo; `render.yaml` provisions
-   `docworkspace-db` (PostgreSQL), `docworkspace-api` (FastAPI) and `docworkspace-web`
-   (static site; rewrites `/api/*` to the API so the session cookie is first-party).
-2. `SESSION_SECRET` is generated; set `CORS_ORIGINS` once the frontend URL exists. Set
-   `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` on
-   **docworkspace-api** only (never on the static site).
-3. Start command runs `alembic upgrade head` and the idempotent seed, then uvicorn on `$PORT`.
-4. Verify `https://<api>.onrender.com/health/ready` returns `"database":"ok"` and `"storage":"ok"`,
-   then run `scripts/smoke_deployed.sh "" "" <commit>` (see [docs/RUNBOOK.md](docs/RUNBOOK.md)).
+Inviting people, removing access, OAuth setup, deploys, rollback and the production cut-over
+are in the [runbook](docs/RUNBOOK.md). The common ones:
 
-Free plan caveats: the web service sleeps when idle; free PostgreSQL expires after 30 days.
+```bash
+# Render → docworkspace-api → Shell
+python scripts/allow_email.py add someone@example.com      # invite
+python scripts/allow_email.py remove someone@example.com   # revoke and end their sessions
+python scripts/allow_email.py list
+```
 
-## Known limitations (MVP)
+Deploys come from `main` through `render.yaml`. Migrations run before the API starts. After a
+deploy, run `scripts/smoke_deployed.sh "" "" <commit>`; set `SMOKE_SESSION` to a session cookie
+value to include the signed-in journey.
 
-No real-time collaboration, comments, version history, public links, email invites, SSO, or
-offline sync. Demo identities must be replaced with real auth before public release.
+## Limitations and what's next
 
-Import is best-effort: `.txt` → paragraphs; `.md` → headings (H4+ become H3), bold/italic,
-lists; links, images, code blocks, quotes and HTML are flattened or removed; `.docx` →
-headings, bold/italic/underline, bulleted/numbered lists; tables, images, tracked changes,
-fonts, colours and section layout are lost. The preview lists every such loss before saving.
-Sharing is view-only with seeded accounts; attachments have **no virus scanning** yet
-([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)). Rate limits are in-process
-(single instance); counters reset on restart.
+No real-time collaboration, comments, version history, public links, editor (write) grants or
+autosave yet. Imports are best-effort, attachments are not virus-scanned
+([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)), and rate limits are
+per-instance. The remaining roadmap phases (document organisation, search, export, deletion and
+recovery, revision history) are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Planned for future releases (post-MVP, not available yet):
+## History and archive
 
-- **Autosave** — the MVP uses explicit Save (button or Ctrl/Cmd+S) with an unsaved-changes
-  indicator and leave-page warnings. Autosave will be considered in a future release
-  ([#27](https://github.com/solaranoir/docs_dup_exercise/issues/27)).
-- **More text sizes** — the editor offers four fixed sizes (Small, Normal, Large, Extra large);
-  additional fixed sizes are tracked in
-  [#26](https://github.com/solaranoir/docs_dup_exercise/issues/26).
-- **Virus/malware scanning** for attachments and imports
-  ([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)).
-- **Real authentication, invitations, editor grants, version history**
-  ([#22](https://github.com/solaranoir/docs_dup_exercise/issues/22)).
+This repository began as the **Document Workspace MVP**, planned as four weekly milestones and
+delivered on 2026-10-29: a single-user editor with view-only sharing between seeded demo identities. Its plan and delivery
+log are in [docs/PLAN.md](docs/PLAN.md). In November 2026 it was turned into Solara Docs:
+
+| Date | Change |
+| --- | --- |
+| 2026-10-29 | MVP weeks 1–4: editor and documents, imports and sharing, attachments, hardening and release |
+| 2026-11-04 | Roadmap, security audit and readiness gates; Render Postgres upgraded to a paid plan |
+| 2026-11-04 | Identity schema and invite allowlist; server-side sessions and CSRF origin check; demo sign-in off in production |
+| 2026-11-04 | GitHub and Google sign-in; share by email; cross-user isolation tests; cut-over tooling |
+| 2026-11-04 | Solara look and feel, return link to Solara Radio Tools, onboarding, phone layout |
+
+The original MVP README, with its setup instructions as they were, is preserved at
+[docs/archive/README-mvp.md](docs/archive/README-mvp.md). Superseded decisions remain in
+[docs/adr/](docs/adr/) and are marked as such (ADR-004, seeded demo identities, is superseded by
+ADR-009).
