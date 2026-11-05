@@ -34,10 +34,60 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
+    __table_args__ = (CheckConstraint("email = lower(email)", name="ck_users_email_lower"),)
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    login_key: Mapped[str] = mapped_column(String(64), unique=True)
+    # Demo identities only (ADR-004); OAuth users have none.
+    login_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True)
     display_name: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserIdentity(Base):
+    """A sign-in method for a user, keyed by the provider's stable account id (ADR-009)."""
+
+    __tablename__ = "user_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_subject", name="uq_user_identities_provider_subject"
+        ),
+        CheckConstraint("provider IN ('github', 'google')", name="ck_user_identities_provider"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    provider_subject: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str] = mapped_column(String(320))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AllowedEmail(Base):
+    """Invite allowlist: only these verified emails may sign in (ADR-009)."""
+
+    __tablename__ = "allowed_emails"
+    __table_args__ = (CheckConstraint("email = lower(email)", name="ck_allowed_emails_lower"),)
+
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class UserSession(Base):
+    """Server-side session. Only the SHA-256 of the cookie token is stored (ADR-009)."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255))
 
 
 class Document(Base):

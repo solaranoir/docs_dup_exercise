@@ -50,7 +50,15 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
     yield session
     session.close()
     with engine.begin() as conn:
-        for table in ("attachments", "document_grants", "documents", "users"):
+        for table in (
+            "sessions",
+            "user_identities",
+            "allowed_emails",
+            "attachments",
+            "document_grants",
+            "documents",
+            "users",
+        ):
             conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608
 
 

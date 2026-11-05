@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api", tags=["demo-auth"])
 
 class UserOut(BaseModel):
     id: int
-    login_key: str
+    login_key: str | None
     display_name: str
 
 
@@ -35,7 +35,9 @@ def _out(user: User) -> UserOut:
 
 @router.get("/demo/users")
 def list_demo_users(db: Annotated[Session, Depends(get_db)]) -> list[UserOut]:
-    return [_out(u) for u in db.scalars(select(User).order_by(User.id))]
+    # Demo identities only: never list real (OAuth) accounts.
+    demo = select(User).where(User.login_key.is_not(None)).order_by(User.id)
+    return [_out(u) for u in db.scalars(demo)]
 
 
 @router.post("/demo/login", dependencies=[Depends(limit_login)])
