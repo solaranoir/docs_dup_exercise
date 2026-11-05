@@ -75,8 +75,7 @@ def test_attachment_authorization(client: TestClient, login) -> None:  # type: i
     assert _attach(client, charlie, doc_id, "b.txt", b"x").status_code == 404
 
     # Bob as viewer: can list and download, cannot add or remove.
-    bob_id = client.get("/api/me", headers=bob).json()["id"]
-    client.post(f"/api/documents/{doc_id}/grants", json={"user_id": bob_id}, headers=alice)
+    client.post(f"/api/documents/{doc_id}/grants", json={"email": "bob@demo.test"}, headers=alice)
     assert client.get(url, headers=bob).content == b"secret"
     assert _attach(client, bob, doc_id, "b.txt", b"x").status_code == 403
     assert client.delete(url, headers=bob).status_code == 403
