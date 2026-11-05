@@ -52,6 +52,19 @@ All three Render resources are managed by the Blueprint (`render.yaml`, branch `
 - **Data:** free Postgres has no point-in-time recovery; paid plans include backups. Attachment
   objects are only deleted when their document/attachment is deleted.
 
+## Invite allowlist (ADR-009)
+
+Only allowlisted emails can sign in once OAuth ships. From `backend/` locally (with
+`DATABASE_URL` set), or in the Render API service's **Shell** tab:
+
+```bash
+python scripts/allow_email.py add someone@example.com --note "POTA club"
+python scripts/allow_email.py list
+python scripts/allow_email.py remove someone@example.com   # ends their sessions at once
+```
+
+Removing an email keeps the user's documents, and re-adding it restores access.
+
 ## Secrets and configuration
 
 Set on **docworkspace-api** only (never on the static site — its env is baked into public JS):
