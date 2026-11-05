@@ -5,7 +5,7 @@ must be ticked, with a date and commit, before the first invite goes out. Audit 
 (A1…) point to [SECURITY_AUDIT.md](SECURITY_AUDIT.md). The MVP gates in
 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) still apply.
 
-## Database plan (free tier expired 2026-11-28)
+## Database plan (free tier would have expired 2026-11-28)
 
 Decision (2026-11-04): the seeded demo data is disposable, so no backup was taken before the
 upgrade.
