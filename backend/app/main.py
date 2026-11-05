@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.csrf import is_cross_site
 from app.observability import configure_logging, request_id_var
-from app.routes import account, attachments, demo, documents, grants, health, imports
+from app.routes import account, attachments, demo, documents, grants, health, imports, oauth
 
 access_log = logging.getLogger("app.access")
 _SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -73,6 +73,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(account.router)
+    app.include_router(oauth.router)
     if settings.demo_auth_enabled:
         app.include_router(demo.router)
     app.include_router(documents.router)

@@ -52,6 +52,30 @@ All three Render resources are managed by the Blueprint (`render.yaml`, branch `
 - **Data:** free Postgres has no point-in-time recovery; paid plans include backups. Attachment
   objects are only deleted when their document/attachment is deleted.
 
+## OAuth sign-in (ADR-009)
+
+| Provider | Where | Callback URL |
+| --- | --- | --- |
+| GitHub | Settings → Developer settings → OAuth Apps | `https://docworkspace-web.onrender.com/api/auth/github/callback` |
+| Google | Cloud Console → APIs & Services → Credentials (Web application) | `https://docworkspace-web.onrender.com/api/auth/google/callback` |
+
+Set `GITHUB_CLIENT_ID/SECRET` and `GOOGLE_CLIENT_ID/SECRET` on `docworkspace-api`. A provider
+shows on the sign-in page only when both of its values are set (`GET /api/auth/methods`).
+Callbacks use the web origin (first `CORS_ORIGINS` entry, or `PUBLIC_BASE_URL`), so the
+`/api/*` rewrite keeps cookies first-party. A GitHub OAuth app has one callback URL, so local
+development needs a second app. Google accepts several redirect URIs.
+
+Sign-in failures redirect to `/?auth_error=<reason>` and log
+`sign-in failed provider=… reason=…` (never emails or tokens):
+
+| Reason | Meaning / fix |
+| --- | --- |
+| `not_invited` | Email not on the allowlist → `allow_email.py add` |
+| `unverified_email` | GitHub primary / Google email not verified at the provider |
+| `expired` | Flow cookie missing or older than 10 min (slow sign-in, blocked cookies) |
+| `cancelled` | User declined on the provider's consent screen |
+| `failed` | State mismatch, provider error, or wrong client secret/callback URL (see `detail=`) |
+
 ## Invite allowlist (ADR-009)
 
 Only allowlisted emails can sign in once OAuth ships. From `backend/` locally (with

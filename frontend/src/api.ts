@@ -9,6 +9,11 @@ export interface User {
   login_key: string | null;
 }
 
+export interface AuthMethods {
+  providers: { name: string; label: string }[];
+  demo: boolean;
+}
+
 /** Seeded identity from the local/test-only demo switcher (ADR-004). */
 export interface DemoUser extends User {
   login_key: string;
@@ -88,6 +93,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   me: () => request<User>("GET", "/api/me"),
+  authMethods: () => request<AuthMethods>("GET", "/api/auth/methods"),
+  signInUrl: (provider: string) => `${BASE}/api/auth/${encodeURIComponent(provider)}/start`,
   demoUsers: () => request<DemoUser[]>("GET", "/api/demo/users"),
   login: (login_key: string) => request<{ user: User }>("POST", "/api/demo/login", { login_key }),
   logout: () => request<void>("POST", "/api/auth/logout"),

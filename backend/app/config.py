@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     # never honoured in production.
     enable_demo_auth: bool = False
 
+    # OAuth sign-in (ADR-009). A provider is offered only when both values are set.
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    # Public web origin used to build OAuth callback URLs. Defaults to the first CORS origin,
+    # which in production is the web origin that rewrites /api to this service.
+    public_base_url: str | None = None
+
     # S3-compatible attachment storage (ADR-005). Unset bucket = attachments unavailable (503).
     storage_endpoint: str | None = None
     storage_bucket: str | None = None
@@ -66,6 +75,18 @@ class Settings(BaseSettings):
         return "__Host-sd_session" if self.is_production else "sd_session"
 
     @property
+    def app_origin(self) -> str:
+        return (self.public_base_url or self.cors_origins[0]).rstrip("/")
+
+    @property
+    def oauth_providers(self) -> list[str]:
+        configured = {
+            "github": self.github_client_id and self.github_client_secret,
+            "google": self.google_client_id and self.google_client_secret,
+        }
+        return [name for name, ok in configured.items() if ok]
+
+    @property
     def trusted_origins(self) -> frozenset[str]:
         return frozenset(o.rstrip("/") for o in self.cors_origins)
 
@@ -78,6 +99,8 @@ class Settings(BaseSettings):
             raise RuntimeError("ENABLE_DEMO_AUTH must not be set in production")
         if not self.cors_origins or any(not o.startswith("https://") for o in self.cors_origins):
             raise RuntimeError("CORS_ORIGINS must list the https:// web origin in production")
+        if not self.app_origin.startswith("https://"):
+            raise RuntimeError("PUBLIC_BASE_URL must be https:// in production")
 
 
 @lru_cache

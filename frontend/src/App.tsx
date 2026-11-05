@@ -24,7 +24,7 @@ export function App() {
   if (user === undefined) return <p className="loading">Loading…</p>;
   if (user === null) return <Login onLogin={setUser} />;
 
-  const switchUser = async () => {
+  const signOut = async () => {
     navigate("#/");
     await api.logout();
     setUser(null);
@@ -38,8 +38,8 @@ export function App() {
         </a>
         <span className="whoami">
           Signed in as <strong>{user.display_name}</strong>
-          <button type="button" onClick={switchUser}>
-            Switch user
+          <button type="button" onClick={signOut}>
+            Sign out
           </button>
         </span>
       </header>

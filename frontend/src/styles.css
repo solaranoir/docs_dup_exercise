@@ -51,6 +51,9 @@ button:disabled { opacity: 0.6; cursor: default; }
 .login { max-width: 420px; }
 .login-users { list-style: none; padding: 0; display: grid; gap: 8px; }
 .login-users button { width: 100%; text-align: left; padding: 12px; }
+.login-provider { display: block; width: 100%; padding: 12px; border-radius: 8px;
+  text-decoration: none; font-weight: 650; box-sizing: border-box; }
+.login h2 { font-size: 1rem; margin-top: 28px; }
 
 .documents-head, .editor-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .doc-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
@@ -211,6 +214,9 @@ button.primary:hover:not(:disabled) { background: linear-gradient(120deg, #a3f6e
 .login h1::before { content: "✦ "; color: #7de6d9; }
 .login-users button { background: #20364c; padding: 16px 18px; font-weight: 650; }
 .login-users button:hover { background: #2b5060; }
+.login-provider { background: #20364c; color: inherit; padding: 16px 18px; }
+.login-provider:hover { background: #2b5060; }
+.login-provider:focus-visible { outline: 2px solid #7de6d9; outline-offset: 2px; }
 .loading { padding: 22px; }
 @media (max-width: 680px) {
   main { padding: 24px 14px 64px; }
