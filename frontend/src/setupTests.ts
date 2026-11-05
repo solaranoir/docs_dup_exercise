@@ -12,3 +12,15 @@ for (const proto of [Range.prototype, Text.prototype] as unknown as Record<strin
   proto.getClientRects ??= emptyRects;
   proto.getBoundingClientRect ??= zeroRect;
 }
+
+// jsdom has <dialog> but not showModal()/close(), so a Modal would stay closed (and its
+// content inaccessible) in tests. Toggle the open attribute the way the browser does.
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.removeAttribute("open");
+    this.dispatchEvent(new Event("close"));
+  };
+}

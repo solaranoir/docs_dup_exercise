@@ -36,6 +36,15 @@ export interface DocumentSummary {
   tags: string[];
 }
 
+/** A built-in template (ADR-011): metadata and an outline for the picker's preview. */
+export interface TemplateSummary {
+  id: string;
+  version: number;
+  name: string;
+  description: string;
+  sections: { heading: string; fields: string[] }[];
+}
+
 export interface Folder {
   id: number;
   name: string;
@@ -143,8 +152,9 @@ export const api = {
     request<{ folder_id: number | null }>("PUT", `/api/documents/${id}/folder`, { folder_id: folderId }),
   setTags: (id: string, tags: string[]) =>
     request<{ tags: string[] }>("PUT", `/api/documents/${id}/tags`, { tags }),
-  createDocument: (title?: string) =>
-    request<DocumentFull>("POST", "/api/documents", title ? { title } : {}),
+  createDocument: (options: { title?: string; template?: string } = {}) =>
+    request<DocumentFull>("POST", "/api/documents", options),
+  listTemplates: () => request<TemplateSummary[]>("GET", "/api/templates"),
   getDocument: (id: string) => request<DocumentFull>("GET", `/api/documents/${id}`),
   updateDocument: (
     id: string,

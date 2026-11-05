@@ -9,6 +9,7 @@ import {
 } from "react";
 import { api, type DocumentSummary, type Folder, type SearchResult } from "../api";
 import { FoldersDialog } from "../components/FoldersDialog";
+import { NewDocumentDialog } from "../components/NewDocumentDialog";
 import { Link } from "../components/Link";
 import { navigate, paths, setSearchParams, useSearchParams } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
@@ -344,7 +345,9 @@ function Onboarding() {
       <h2 id="h-welcome">Welcome to Solara Docs</h2>
       <p>
         A notebook for station logs, activation plans, antenna experiments and research notes.
-        Start with <strong>New document</strong>, or bring existing notes in with{" "}
+        Start with <strong>New document</strong>: a blank page or a template for POTA
+        activations, satellite passes, antenna experiments or research notes. Or bring existing
+        notes in with{" "}
         <strong>Import file</strong>.
       </p>
       <ul>
@@ -416,10 +419,7 @@ export function DocumentList() {
   const searching = query.trim() !== "";
   const status = searchStatus(search);
 
-  const createNew = async () => {
-    const doc = await api.createDocument();
-    navigate(paths.doc(doc.id));
-  };
+  const [newOpen, setNewOpen] = useState(false);
 
   if (error) return <p role="alert">{error}</p>;
   if (!docs) return <p className="loading">Loading…</p>;
@@ -444,11 +444,16 @@ export function DocumentList() {
           <button type="button" onClick={() => setImportOpen(true)}>
             Import file
           </button>
-          <button type="button" className="primary" onClick={createNew}>
+          <button type="button" className="primary" onClick={() => setNewOpen(true)}>
             New document
           </button>
         </div>
       </div>
+      <NewDocumentDialog
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onCreated={(doc) => navigate(paths.doc(doc.id))}
+      />
       {importOpen && (
         <Suspense fallback={<p className="loading">Loading…</p>}>
           <ImportDialog

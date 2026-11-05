@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import exists, false, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -28,6 +28,7 @@ from app.organization import normalize_tag, organization_for, set_folder, set_ta
 from app.policy import Permission, can_delete, can_edit, can_read, permission_for
 from app.search import MAX_QUERY_LENGTH, match_and_rank, query_terms, snippet
 from app.storage import Storage, StorageError, optional_storage
+from app.templates import BY_ID as TEMPLATE_IDS
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 log = logging.getLogger(__name__)
@@ -43,6 +44,10 @@ def _clean_title(value: str) -> str:
     return value
 
 
+def _clean_optional_title(value: str | None) -> str | None:
+    return None if value is None else _clean_title(value)
+
+
 def _clean_content(value: dict[str, Any] | None) -> dict[str, Any] | None:
     if value is None:
         return None
@@ -53,11 +58,22 @@ def _clean_content(value: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 class DocumentCreate(BaseModel):
-    title: str = "Untitled document"
+    title: str | None = None
     content_json: dict[str, Any] | None = None
+    # A built-in template id (ADR-011): the document starts with that template's content.
+    template: str | None = None
 
-    _title = field_validator("title")(_clean_title)
+    _title = field_validator("title")(_clean_optional_title)
     _content = field_validator("content_json")(_clean_content)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> "DocumentCreate":
+        if self.template is not None:
+            if self.template not in TEMPLATE_IDS:
+                raise ValueError("Unknown template")
+            if self.content_json is not None:
+                raise ValueError("Give either a template or content, not both")
+        return self
 
 
 class DocumentPatch(BaseModel):
@@ -276,7 +292,12 @@ def search_documents(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_document(body: DocumentCreate, user: CurrentUser, db: DB) -> DocumentOut:
-    doc = Document(owner_id=user.id, title=body.title, content_json=body.content_json or EMPTY_DOC)
+    template = TEMPLATE_IDS.get(body.template) if body.template else None
+    if template:
+        title, content = body.title or template.name, template.content()
+    else:
+        title, content = body.title or "Untitled document", body.content_json or EMPTY_DOC
+    doc = Document(owner_id=user.id, title=title, content_json=content)
     db.add(doc)
     db.commit()
     return document_out(db, doc, "owner")
