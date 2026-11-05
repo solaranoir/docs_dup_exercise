@@ -1,6 +1,7 @@
 # ADR-004: Seeded demo identities with a signed session
 
-- **Status:** Accepted for MVP (2026-10-29) — **must be replaced before any public release**
+- **Status:** Accepted for MVP (2026-10-29). Superseded by [ADR-009](0009-oauth-allowlist-authentication.md)
+  (2026-11-04): demo login stays for local development and tests only.
 - **Context:** The demo needs fast, repeatable identity switching (Alice/Bob/Charlie) without an
   identity provider.
 - **Decision:** Idempotent seed on every API start (user decision). `POST /api/demo/login`
