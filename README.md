@@ -8,12 +8,16 @@ Status: **Week 4 — Hardening + release** (rate limits, JSON logs, security hea
 verification, runbook, ADRs). Live demo: https://docworkspace-web.onrender.com
 Plan and task tracking: [docs/PLAN.md](docs/PLAN.md) and the GitHub issues. Operations:
 [docs/RUNBOOK.md](docs/RUNBOOK.md). Release gate: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+
 Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-009).
 
 **Next: Solara Docs.** Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Security audit:
 [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md). v0.5 release gates:
 [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md). The free database expires around
 **2026-11-28**; see the readiness checklist.
+=======
+Architecture overview: [ARCHITECTURE.md](ARCHITECTURE.md). Design decisions: [docs/adr/](docs/adr/) (ADR-001 … ADR-008).
+
 
 ## Layout
 
