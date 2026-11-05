@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { api, type DocumentSummary } from "../api";
 import { navigate } from "../router";
+import { useDocumentTitle } from "../useDocumentTitle";
 
 const ImportDialog = lazy(() =>
   import("../components/ImportDialog").then((m) => ({ default: m.ImportDialog })),
@@ -33,7 +34,43 @@ function Section({ title, docs, empty }: { title: string; docs: DocumentSummary[
   );
 }
 
+/** First-run guidance, shown until the user owns a document (DOC-014). Points at the page's
+ * own buttons rather than duplicating them. */
+function Onboarding() {
+  return (
+    <section className="onboarding" aria-labelledby="h-welcome">
+      <h2 id="h-welcome">Welcome to Solara Docs</h2>
+      <p>
+        A notebook for station logs, activation plans, antenna experiments and research notes.
+        Start with <strong>New document</strong>, or bring existing notes in with{" "}
+        <strong>Import file</strong>.
+      </p>
+      <ul>
+        <li>
+          <strong>Write</strong>
+          <span>
+            Headings, lists and emphasis. Save with the button or <kbd>Ctrl+S</kbd> / <kbd>⌘S</kbd>.
+          </span>
+        </li>
+        <li>
+          <strong>Import</strong>
+          <span>Plain text, Markdown or Word (.docx) files become editable documents.</span>
+        </li>
+        <li>
+          <strong>Attach</strong>
+          <span>Keep logs, photos and data files with the document they belong to.</span>
+        </li>
+        <li>
+          <strong>Share</strong>
+          <span>Give someone read-only access by email once they have signed in.</span>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
 export function DocumentList() {
+  useDocumentTitle("My Documents");
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,10 +87,14 @@ export function DocumentList() {
 
   if (error) return <p role="alert">{error}</p>;
   if (!docs) return <p className="loading">Loading…</p>;
+  const owned = docs.filter((d) => d.permission === "owner");
   return (
     <div className="documents">
       <div className="documents-head">
-        <h1>My Documents</h1>
+        <div>
+          <h1>My Documents</h1>
+          <p>Your notes and the documents others have shared with you.</p>
+        </div>
         <div className="actions">
           <button type="button" onClick={() => setImportOpen(true)}>
             Import file
@@ -72,11 +113,8 @@ export function DocumentList() {
           />
         </Suspense>
       )}
-      <Section
-        title="Owned by me"
-        docs={docs.filter((d) => d.permission === "owner")}
-        empty="No documents yet. Create one to get started."
-      />
+      {owned.length === 0 && <Onboarding />}
+      <Section title="Owned by me" docs={owned} empty="No documents yet. Create one to get started." />
       <Section
         title="Shared with me"
         docs={docs.filter((d) => d.permission !== "owner")}

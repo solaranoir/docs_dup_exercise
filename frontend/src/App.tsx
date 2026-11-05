@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { api, ApiError, type User } from "./api";
+import { SOLARA_TOOLS_URL } from "./config";
 import { DocumentList } from "./pages/DocumentList";
 import { Login } from "./pages/Login";
 import { navigate, useRoute } from "./router";
@@ -33,9 +34,15 @@ export function App() {
   return (
     <>
       <header className="app-header">
-        <a href="#/" className="brand" onClick={(e) => (e.preventDefault(), navigate("#/"))}>
-          Solara Docs
-        </a>
+        <div className="header-start">
+          <a href={SOLARA_TOOLS_URL} className="back-to-solara">
+            <span aria-hidden="true">← </span>Solara Radio Tools
+          </a>
+          <a href="#/" className="brand" onClick={(e) => (e.preventDefault(), navigate("#/"))}>
+            <strong>Solara Docs</strong>
+            <small>Field notes &amp; technical docs</small>
+          </a>
+        </div>
         <span className="whoami">
           Signed in as <strong>{user.display_name}</strong>
           <button type="button" onClick={signOut}>

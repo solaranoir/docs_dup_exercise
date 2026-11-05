@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type AuthMethods, type DemoUser, type User } from "../api";
+import { SOLARA_TOOLS_URL } from "../config";
+import { useDocumentTitle } from "../useDocumentTitle";
 
 const SIGN_IN_FAILED = "Sign-in failed. Please try again.";
 /** Reasons the API puts in `?auth_error=` after a failed OAuth callback (backend app/oauth.py). */
@@ -26,6 +28,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [demoUsers, setDemoUsers] = useState<DemoUser[]>([]);
   const [error, setError] = useState<string | null>(() => takeAuthError());
+  useDocumentTitle("Sign in");
 
   useEffect(() => {
     api.authMethods().then(
@@ -77,6 +80,9 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
           <p className="hint">Local development only — never available in production.</p>
         </section>
       )}
+      <a className="login-back" href={SOLARA_TOOLS_URL}>
+        <span aria-hidden="true">← </span>Back to Solara Radio Tools
+      </a>
     </main>
   );
 }
