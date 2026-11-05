@@ -13,3 +13,6 @@ dist/
 playwright-report/
 test-results/
 .DS_Store
+
+# Local archives (a 200 MB .zip once sat in the repo root)
+*.zip

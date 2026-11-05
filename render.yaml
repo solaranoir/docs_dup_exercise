@@ -3,7 +3,9 @@ databases:
   - name: docworkspace-db
     databaseName: docworkspace
     user: docworkspace
-    plan: free # NOTE: free Postgres expires after 30 days — see issue #5
+    # Paid plan: free Postgres expires after 30 days (ours on ~2026-11-28) and has no backups.
+    # Upgrade in the dashboard first; this keeps a Blueprint sync from reverting it.
+    plan: basic-256mb
 
 services:
   - type: web
