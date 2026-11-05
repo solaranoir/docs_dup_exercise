@@ -5,13 +5,13 @@ must be ticked, with a date and commit, before the first invite goes out. Audit 
 (A1…) point to [SECURITY_AUDIT.md](SECURITY_AUDIT.md). The MVP gates in
 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) still apply.
 
-## ⏰ Deadline: database expiry (2026-11-28)
+## Database plan (free tier expired 2026-11-28)
 
-- [ ] **Back up now:** `pg_dump --format=custom "$EXTERNAL_DATABASE_URL" > docworkspace-$(date +%F).dump`
-      and store it outside Render.
-- [ ] Render dashboard → `docworkspace-db` → upgrade instance type from Free to a paid plan
-      (`basic-256mb` or larger). Data is kept on upgrade. `render.yaml` already matches, so a
-      Blueprint sync will not revert it.
+Decision (2026-11-04): the seeded demo data is disposable, so no backup was taken before the
+upgrade.
+
+- [x] Render dashboard → `docworkspace-db` → upgraded from Free to a paid plan (`basic-256mb`),
+      matching `render.yaml` so a Blueprint sync will not revert it. (2026-11-04)
 - [ ] Confirm point-in-time recovery / daily backups appear on the database's Recovery tab.
 - [ ] `/health/ready` reports `database: ok` after the upgrade.
 
@@ -34,6 +34,9 @@ must be ticked, with a date and commit, before the first invite goes out. Audit 
 - [ ] DOC-007 **Restore drill:** restore the latest dump into a scratch database, run `alembic current`, spot-check a document
 - [ ] DOC-007 R2 bucket is private (no public URL) and its API token is scoped to that bucket only
 - [ ] OAuth client secrets and `SESSION_SECRET` live only in Render env vars, and `.env.example` lists names without values
+- [ ] **Demo-data cleanup at cut-over:** delete the Alice/Bob/Charlie users (`login_key IS NOT NULL`)
+      and, through the cascade, their documents and grants. Delete their attachment objects from R2
+      too, since the database cascade does not reach object storage. Do this before the first invite.
 - [ ] `scripts/smoke_deployed.sh` updated for OAuth (uses a test-only session in CI, or a manual sign-in step) and passing
 - [ ] Rollback rehearsed: redeploy the previous commit, and migrations stay backward-compatible for one release
 

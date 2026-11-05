@@ -11,7 +11,7 @@ repository keeps its name. The MVP delivery history is in [PLAN.md](PLAN.md).
 | --- | --- | --- |
 | Authentication | OAuth (GitHub + Google), server-side sessions | [ADR-009](adr/0009-oauth-allowlist-authentication.md) |
 | Signup | Invite allowlist only during v0.5 | ADR-009 |
-| Database | Upgrade Render Postgres to a paid plan before 2026-11-28 | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) |
+| Database | Render Postgres upgraded to a paid plan (2026-11-04); demo data disposable, removed at cut-over | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) |
 | Stack | Keep React/Tiptap, FastAPI, PostgreSQL, R2; no Redis, CRDT or AI in v1.0 | roadmap §9 |
 
 ## Releases
@@ -33,7 +33,7 @@ Security and visual changes never share a PR.
 | 3 | Server-side sessions, `__Host-` cookie, Origin-check CSRF middleware; demo auth gated off in production | DOC-004, DOC-005 |
 | 4 | OAuth GitHub + Google: start/callback, account linking, sign-in page | DOC-001 |
 | 5 | Share by email; drop user directory; isolation test matrix | DOC-003, DOC-006, DOC-008 |
-| 6 | Deployed cut-over: OAuth apps, env vars, demo-data decision, smoke script, restore drill | DOC-007, v0.5 sign-off |
+| 6 | Deployed cut-over: OAuth apps, env vars, demo-data cleanup, smoke script, restore drill | DOC-007, v0.5 sign-off |
 | 7+ | Solara branding, return-to-Solara nav, mobile layout, routing, onboarding, a11y | DOC-009…015 |
 
 ## Backlog by phase
