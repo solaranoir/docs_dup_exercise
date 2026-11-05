@@ -94,8 +94,9 @@ def test_data_survives_api_restart(engine: Engine, login, client: TestClient) ->
     doc = client.post(
         "/api/documents", json={"title": "Persist", "content_json": content}, headers=alice
     ).json()
-    bob_id = client.get("/api/me", headers=login("bob")).json()["id"]
-    client.post(f"/api/documents/{doc['id']}/grants", json={"user_id": bob_id}, headers=alice)
+    client.post(
+        f"/api/documents/{doc['id']}/grants", json={"email": "bob@demo.test"}, headers=alice
+    )
 
     # "Restart": brand-new app instance and a brand-new DB session on the same database.
     fresh_session = sessionmaker(bind=engine, expire_on_commit=False)()

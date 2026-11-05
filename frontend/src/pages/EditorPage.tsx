@@ -192,7 +192,6 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           documentId={initial.id}
-          ownerId={initial.owner.id}
         />
       )}
     </div>

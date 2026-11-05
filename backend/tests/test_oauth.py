@@ -111,7 +111,7 @@ def _error(r: httpx.Response) -> str | None:
 
 
 def _users(db: Session) -> int:
-    return db.scalar(select(func.count()).select_from(User).where(User.email.is_not(None))) or 0
+    return db.scalar(select(func.count()).select_from(User).where(User.login_key.is_(None))) or 0
 
 
 # --- discovery and redirect ---------------------------------------------------------------
