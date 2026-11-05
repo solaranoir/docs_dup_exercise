@@ -3,27 +3,30 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select, update
+from sqlalchemy import exists, false, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser
-from app.content import ContentError, validate_content
+from app.content import ContentError, plain_text, validate_content
 from app.db import get_db
 from app.models import (
     EMPTY_DOC,
     Attachment,
     Document,
+    DocumentFolder,
     DocumentGrant,
+    DocumentTag,
     DocumentVisit,
     User,
     utcnow,
 )
-from app.organization import organization_for, set_folder, set_tags
+from app.organization import normalize_tag, organization_for, set_folder, set_tags
 from app.policy import Permission, can_delete, can_edit, can_read, permission_for
+from app.search import MAX_QUERY_LENGTH, match_and_rank, query_terms, snippet
 from app.storage import Storage, StorageError, optional_storage
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -93,6 +96,11 @@ class DocumentSummary(BaseModel):
 
 class DocumentOut(DocumentSummary):
     content_json: dict[str, Any]
+
+
+class SearchResult(DocumentSummary):
+    # Plain text around the first body match (or the opening lines); None for an empty body.
+    snippet: str | None
 
 
 def _summary(
@@ -182,6 +190,88 @@ def list_documents(user: CurrentUser, db: DB, archived: bool = False) -> list[Do
     for item in items:
         item.folder_id, item.tags = folders.get(item.id), tags.get(item.id, [])
     return sorted(items, key=lambda s: s.updated_at, reverse=True)
+
+
+SEARCH_LIMIT = 50
+
+
+def _organisation_filters(user: User, folder: str | None, tag: str | None) -> list[Any]:
+    """SQL conditions for the caller's own folder/tag (ADR-010). Unknown tags match nothing."""
+    conditions: list[Any] = []
+    if folder is not None:
+        filed = exists().where(
+            DocumentFolder.user_id == user.id, DocumentFolder.document_id == Document.id
+        )
+        if folder == "unfiled":
+            conditions.append(~filed)
+        else:
+            conditions.append(filed.where(DocumentFolder.folder_id == int(folder)))
+    if tag:
+        try:
+            normalized = normalize_tag(tag)
+        except ValueError:
+            return [false()]
+        conditions.append(
+            exists().where(
+                DocumentTag.user_id == user.id,
+                DocumentTag.document_id == Document.id,
+                DocumentTag.tag == normalized,
+            )
+        )
+    return conditions
+
+
+@router.get("/search")
+def search_documents(
+    user: CurrentUser,
+    db: DB,
+    q: Annotated[str, Query(max_length=MAX_QUERY_LENGTH)] = "",
+    folder: Annotated[str | None, Query(pattern=r"^(\d{1,9}|unfiled)$")] = None,
+    tag: Annotated[str | None, Query(max_length=100)] = None,
+) -> list[SearchResult]:
+    """Title and body search over the caller's own and shared, unarchived documents (DOC-017).
+
+    The permission filter is part of the SQL, before the LIMIT, so other users' documents can
+    never appear, be counted or contribute snippets. Best matches first, at most SEARCH_LIMIT.
+    ``folder`` (an id or ``unfiled``) and ``tag`` narrow to the caller's *own* organisation
+    (ADR-010), also in SQL before the LIMIT.
+    """
+    terms = query_terms(q)
+    if not terms:
+        return []
+    filters = _organisation_filters(user, folder, tag)
+    match, order = match_and_rank(db.get_bind().dialect.name, terms)
+    shared_with_me = (DocumentGrant.document_id == Document.id) & (
+        DocumentGrant.grantee_id == user.id
+    )
+    visit_join = (DocumentVisit.document_id == Document.id) & (DocumentVisit.user_id == user.id)
+    rows = db.execute(
+        select(Document, User, DocumentGrant.role, DocumentVisit.last_opened_at)
+        .join(User, User.id == Document.owner_id)
+        # (document_id, grantee_id) is unique, so this join never duplicates a document.
+        .outerjoin(DocumentGrant, shared_with_me)
+        .outerjoin(DocumentVisit, visit_join)
+        .where(
+            or_(Document.owner_id == user.id, DocumentGrant.id.is_not(None)),
+            Document.archived_at.is_(None),
+            match,
+            *filters,
+        )
+        .order_by(*order, Document.id)
+        .limit(SEARCH_LIMIT)
+    ).all()
+    folders, tags = organization_for(db, user, [doc.id for doc, *_ in rows])
+    results = []
+    for doc, owner, role, opened in rows:
+        permission: Permission = (
+            "owner" if doc.owner_id == user.id else "editor" if role == "editor" else "viewer"
+        )
+        summary = _summary(doc, owner, permission, opened)
+        summary.folder_id, summary.tags = folders.get(doc.id), tags.get(doc.id, [])
+        results.append(
+            SearchResult(**summary.model_dump(), snippet=snippet(doc.search_text, terms))
+        )
+    return results
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -287,6 +377,8 @@ def apply_update(
     db: Session, doc: Document, expected_revision: int, values: dict[str, Any]
 ) -> None:
     """Compare-and-swap on revision (ADR-003): a stale writer never overwrites newer content."""
+    if "content_json" in values:  # keep search in step with content (DOC-017)
+        values = {**values, "search_text": plain_text(values["content_json"])}
     result = db.execute(
         update(Document)
         .where(Document.id == doc.id, Document.revision == expected_revision)

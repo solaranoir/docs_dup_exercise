@@ -47,6 +47,11 @@ export interface TagSummary {
   suggestions: string[];
 }
 
+/** A search hit (DOC-017): plain text around the first body match, or the opening lines. */
+export interface SearchResult extends DocumentSummary {
+  snippet: string | null;
+}
+
 export interface DocumentFull extends DocumentSummary {
   content_json: JSONContent;
 }
@@ -119,6 +124,13 @@ export const api = {
   logout: () => request<void>("POST", "/api/auth/logout"),
   listDocuments: (archived = false) =>
     request<DocumentSummary[]>("GET", archived ? "/api/documents?archived=true" : "/api/documents"),
+  /** Own and shared, unarchived documents matching every word; best first, at most 50. */
+  searchDocuments: (q: string, filters: { folder?: string | null; tag?: string | null } = {}) => {
+    const params = new URLSearchParams({ q });
+    if (filters.folder) params.set("folder", filters.folder);
+    if (filters.tag) params.set("tag", filters.tag);
+    return request<SearchResult[]>("GET", `/api/documents/search?${params}`);
+  },
   archiveDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/archive`),
   restoreDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/restore`),
   duplicateDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/duplicate`),

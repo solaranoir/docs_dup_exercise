@@ -1,19 +1,18 @@
 """personal folders and tags (DOC-016, DOC-018; ADR-010)
 
 Revision ID: 0005
-Revises: 0003
+Revises: 0004
 Create Date: 2026-11-04
 
-Additive only: existing documents start unfiled and untagged. Numbered 0005 so the search
-migration (0004, DOC-017) can land first or second; whichever merges second points its
-down_revision at the other.
+Additive only: existing documents start unfiled and untagged. Follows the search migration
+(0004, DOC-017).
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0005"
-down_revision = "0003"
+down_revision = "0004"
 branch_labels = None
 depends_on = None
 

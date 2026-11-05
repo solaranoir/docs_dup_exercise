@@ -230,11 +230,12 @@ def test_duplicate_copies_the_callers_organisation(
 
 def test_existing_documents_survive_the_migration(engine: Engine, database_url: str) -> None:
     """Acceptance: documents created before 0005 stay readable, unfiled and untagged."""
+    # Inserted at 0004 (after the search migration), so 0005 is the only step under test.
     cfg = Config(str(BACKEND / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND / "alembic"))
     cfg.set_main_option("sqlalchemy.url", database_url)
     engine.dispose()
-    command.downgrade(cfg, "0003")
+    command.downgrade(cfg, "0004")
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -271,3 +272,37 @@ def test_existing_documents_survive_the_migration(engine: Engine, database_url: 
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM documents WHERE title = 'Old plan'"))
             conn.execute(text("DELETE FROM users WHERE email = 'pre5@x.io'"))
+
+
+def test_search_filters_by_the_callers_folder_and_tag(
+    client: TestClient, alice: Headers, bob: Headers
+) -> None:
+    filed, loose = _doc(client, alice, "Antenna filed"), _doc(client, alice, "Antenna loose")
+    folder = _folder(client, alice, "Antennas")
+    client.put(
+        f"/api/documents/{filed['id']}/folder", json={"folder_id": folder["id"]}, headers=alice
+    )
+    client.put(f"/api/documents/{filed['id']}/tags", json={"tags": ["efhw"]}, headers=alice)
+
+    def titles(**params: str) -> list[str]:
+        r = client.get("/api/documents/search", params={"q": "antenna", **params}, headers=alice)
+        assert r.status_code == 200, r.text
+        return sorted(d["title"] for d in r.json())
+
+    assert titles() == ["Antenna filed", "Antenna loose"]
+    assert titles(folder=str(folder["id"])) == ["Antenna filed"]
+    assert titles(folder="unfiled") == ["Antenna loose"]
+    assert titles(tag="EFHW") == ["Antenna filed"]
+    assert titles(tag="nope") == [] and titles(tag="bad<tag") == []
+    hit = client.get("/api/documents/search", params={"q": "filed"}, headers=alice).json()[0]
+    assert (hit["folder_id"], hit["tags"]) == (folder["id"], ["efhw"])
+    bad = client.get("/api/documents/search", params={"q": "a", "folder": "x"}, headers=alice)
+    assert bad.status_code == 422
+
+    # Bob's view of Alice's folder id finds nothing, even for a document shared with him.
+    _share(client, filed["id"], alice)
+    r = client.get(
+        "/api/documents/search", params={"q": "antenna", "folder": str(folder["id"])}, headers=bob
+    )
+    assert r.json() == []
+    assert loose  # unfiled doc exists for the "unfiled" assertion above

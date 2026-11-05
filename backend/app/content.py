@@ -105,3 +105,42 @@ def validate_content(doc: Any) -> dict[str, Any]:
     _check_node(doc, frozenset({"doc"}), 0)
     assert isinstance(doc, dict)
     return doc
+
+
+_TEXT_BLOCKS = frozenset({"paragraph", "heading"})
+
+
+def plain_text(doc: Any) -> str:
+    """Searchable plain text of a Tiptap document (DOC-017): one line per paragraph or heading.
+
+    Tolerant of malformed input (keeps what it can read) because it also backfills rows
+    stored before this helper existed.
+    """
+    lines: list[str] = []
+
+    def inline(node: dict[str, Any]) -> str:
+        parts: list[str] = []
+        for child in node.get("content") or []:
+            if not isinstance(child, dict):
+                continue
+            if child.get("type") == "text" and isinstance(child.get("text"), str):
+                parts.append(child["text"])
+            elif child.get("type") == "hardBreak":
+                parts.append("\n")
+        return "".join(parts)
+
+    def walk(node: Any, depth: int) -> None:
+        if not isinstance(node, dict) or depth > MAX_DEPTH:
+            return
+        if node.get("type") in _TEXT_BLOCKS:
+            text = inline(node).strip()
+            if text:
+                lines.append(text)
+            return
+        children = node.get("content")
+        if isinstance(children, list):
+            for child in children:
+                walk(child, depth + 1)
+
+    walk(doc, 0)
+    return "\n".join(lines)

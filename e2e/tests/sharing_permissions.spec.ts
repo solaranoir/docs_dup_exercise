@@ -45,7 +45,9 @@ test("Alice shares with Bob (read-only), Charlie is denied, revoke removes acces
   await switchTo(page, "bob");
   const sharedSection = page.getByRole("region", { name: "Shared with me" });
   await expect(sharedSection.getByRole("link", { name: title })).toBeVisible();
-  await expect(sharedSection.getByText(`View only · ${NAMES.alice}`)).toBeVisible();
+  // Scoped to this document's row: other specs (e.g. search) also share Alice's docs with Bob.
+  const row = sharedSection.getByRole("listitem").filter({ hasText: title });
+  await expect(row.getByText(`View only · ${NAMES.alice}`)).toBeVisible();
   await sharedSection.getByRole("link", { name: title }).click();
   await expect(page.getByText(`View only · shared by ${NAMES.alice}`)).toBeVisible();
   await expect(page.getByLabel("Document body")).toContainText("Shared content");

@@ -134,6 +134,19 @@ def test_listing_shows_only_own_and_shared(client: TestClient, world: World) -> 
     assert client.get("/api/documents", headers={}).status_code == 401
 
 
+def test_search_shows_only_own_and_shared(client: TestClient, world: World) -> None:
+    """Search (DOC-017) is not document-scoped, so it has its own row: same visibility as lists."""
+
+    def ids(role: str) -> list[str]:
+        r = client.get("/api/documents/search", params={"q": "field"}, headers=world.headers[role])
+        return [d["id"] for d in r.json()]
+
+    assert ids("owner") == [world.doc_id]
+    assert ids("viewer") == [world.doc_id]
+    assert ids("stranger") == []
+    assert client.get("/api/documents/search", params={"q": "field"}).status_code == 401
+
+
 def test_attachment_ids_do_not_cross_documents(client: TestClient, world: World) -> None:
     """Owning document B doesn't unlock document A's attachment via B's URL."""
     stranger = world.headers["stranger"]

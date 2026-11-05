@@ -1,5 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { api, type DocumentSummary, type Folder } from "../api";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { api, type DocumentSummary, type Folder, type SearchResult } from "../api";
 import { FoldersDialog } from "../components/FoldersDialog";
 import { Link } from "../components/Link";
 import { navigate, paths, setSearchParams, useSearchParams } from "../router";
@@ -89,6 +97,52 @@ function DocTime({ doc, when }: { doc: DocumentSummary; when: When }) {
   );
 }
 
+function DocRow({
+  doc: d,
+  when,
+  title,
+  children,
+  folderNames,
+}: {
+  doc: DocumentSummary;
+  when: When;
+  title?: ReactNode;
+  children?: ReactNode;
+  /** When given, the row shows the name of the user's folder for it (ADR-010). */
+  folderNames?: Map<number, string>;
+}) {
+  return (
+    <li>
+      <Link to={paths.doc(d.id)}>{title ?? d.title}</Link>
+      {d.permission !== "owner" && (
+        <span className={`badge badge-${d.permission}`}>
+          {d.permission === "viewer" ? "View only" : "Can edit"} ·{" "}
+          {d.owner.display_name}
+        </span>
+      )}
+      {folderNames && d.folder_id !== null && folderNames.has(d.folder_id) && (
+        <span className="doc-folder">
+          <span aria-hidden="true">▤ </span>
+          <span className="visually-hidden">Folder: </span>
+          {folderNames.get(d.folder_id)}
+        </span>
+      )}
+      {d.tags.length > 0 && (
+        <span className="doc-tags">
+          <span className="visually-hidden">Tags: </span>
+          {d.tags.map((t) => (
+            <span key={t} className="tag">
+              {t}
+            </span>
+          ))}
+        </span>
+      )}
+      <DocTime doc={d} when={when} />
+      {children}
+    </li>
+  );
+}
+
 function Section({
   title,
   docs,
@@ -115,37 +169,112 @@ function Section({
       ) : (
         <ul className="doc-list">
           {docs.map((d) => (
-            <li key={d.id}>
-              <Link to={paths.doc(d.id)}>{d.title}</Link>
-              {d.permission !== "owner" && (
-                <span className={`badge badge-${d.permission}`}>
-                  {d.permission === "viewer" ? "View only" : "Can edit"} ·{" "}
-                  {d.owner.display_name}
-                </span>
-              )}
-              {folderNames && d.folder_id !== null && folderNames.has(d.folder_id) && (
-                <span className="doc-folder">
-                  <span aria-hidden="true">▤ </span>
-                  <span className="visually-hidden">Folder: </span>
-                  {folderNames.get(d.folder_id)}
-                </span>
-              )}
-              {d.tags.length > 0 && (
-                <span className="doc-tags">
-                  <span className="visually-hidden">Tags: </span>
-                  {d.tags.map((t) => (
-                    <span key={t} className="tag">
-                      {t}
-                    </span>
-                  ))}
-                </span>
-              )}
-              <DocTime doc={d} when={when} />
+            <DocRow key={d.id} doc={d} when={when} folderNames={folderNames}>
               {action?.(d)}
-            </li>
+            </DocRow>
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** The server returns at most this many hits (DOC-017). */
+export const SEARCH_LIMIT = 50;
+const SEARCH_DELAY_MS = 250;
+
+interface SearchState {
+  /** The query these results answer; lags the input while the user is still typing. */
+  query: string;
+  results: SearchResult[] | null;
+  error: string | null;
+}
+const NO_SEARCH: SearchState = { query: "", results: null, error: null };
+
+/** Debounced server search; responses for superseded queries are dropped. */
+/** Debounced search; ``folder``/``tag`` narrow it server-side, before the result limit. */
+function useSearch(input: string, folder: string | null, tag: string | null): SearchState {
+  const q = input.trim();
+  const [state, setState] = useState<SearchState>(NO_SEARCH);
+  useEffect(() => {
+    if (!q) return;
+    let current = true;
+    const timer = window.setTimeout(() => {
+      api.searchDocuments(q, { folder, tag }).then(
+        (results) => current && setState({ query: q, results, error: null }),
+        (e: Error) => current && setState({ query: q, results: null, error: e.message }),
+      );
+    }, SEARCH_DELAY_MS);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [q, folder, tag]);
+  return q ? state : NO_SEARCH;
+}
+
+export function searchStatus({ query, results }: SearchState): string {
+  if (!query || !results) return "";
+  const n = results.length;
+  if (n === 0) return `No documents match “${query}”.`;
+  if (n >= SEARCH_LIMIT) {
+    return `Showing the first ${n} documents that match “${query}”. Add words to narrow it down.`;
+  }
+  return `${n} ${n === 1 ? "document matches" : "documents match"} “${query}”.`;
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Marks where the query's words (and their hyphen/dot/slash-separated parts, as the server
+ * splits them) start a word, mirroring the server's word-prefix matching. React escapes every
+ * piece, so a snippet can never inject markup. */
+export function Highlight({ text, query }: { text: string; query: string }) {
+  const words = query
+    .split(/\s+/)
+    .flatMap((w) => [w, ...w.split(/[-./]/)])
+    .filter((w) => /[\p{L}\p{N}]/u.test(w));
+  if (words.length === 0) return <>{text}</>;
+  const longestFirst = [...new Set(words)].sort((x, y) => y.length - x.length);
+  const alternatives = longestFirst.map(escapeRegExp).join("|");
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(${alternatives})`, "giu");
+  return (
+    <>
+      {text
+        .split(pattern)
+        .map((part, i) => (i % 2 === 1 ? <mark key={i}>{part}</mark> : part))}
+    </>
+  );
+}
+
+function SearchResults({
+  search,
+  folderNames,
+}: {
+  search: SearchState;
+  folderNames: Map<number, string>;
+}) {
+  if (search.error) return <p role="alert">{search.error}</p>;
+  if (!search.results?.length) return null;
+  return (
+    <section aria-labelledby="h-search-results">
+      <h2 id="h-search-results">Search results</h2>
+      <ul className="doc-list">
+        {search.results.map((d) => (
+          <DocRow
+            key={d.id}
+            doc={d}
+            when="edited"
+            title={<Highlight text={d.title} query={search.query} />}
+            folderNames={folderNames}
+          >
+            {d.snippet && (
+              <p className="snippet">
+                <Highlight text={d.snippet} query={search.query} />
+              </p>
+            )}
+          </DocRow>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -273,6 +402,19 @@ export function DocumentList() {
   useEffect(load, [load]);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  // Filters come from the URL; a folder id the user doesn't have is ignored (ADR-010).
+  const folderNames = new Map(folders.map((f) => [f.id, f.name]));
+  const folderParam = params.get("folder");
+  const folder =
+    folderParam === "unfiled" || (folderParam !== null && folderNames.has(Number(folderParam)))
+      ? folderParam
+      : null;
+  const tag = params.get("tag");
+  const search = useSearch(query, folder, tag);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searching = query.trim() !== "";
+  const status = searchStatus(search);
 
   const createNew = async () => {
     const doc = await api.createDocument();
@@ -281,13 +423,6 @@ export function DocumentList() {
 
   if (error) return <p role="alert">{error}</p>;
   if (!docs) return <p className="loading">Loading…</p>;
-  const folderNames = new Map(folders.map((f) => [f.id, f.name]));
-  const folderParam = params.get("folder");
-  const folder =
-    folderParam === "unfiled" || (folderParam !== null && folderNames.has(Number(folderParam)))
-      ? folderParam
-      : null;
-  const tag = params.get("tag");
   const filtering = folder !== null || tag !== null;
   const tagsInUse = [...new Set(docs.flatMap((d) => d.tags))].sort();
 
@@ -323,11 +458,43 @@ export function DocumentList() {
           />
         </Suspense>
       )}
-      {!ownsAny && <Onboarding />}
-      {!filtering && recent.length > 0 && (
-        <Section title="Recently opened" docs={recent} when="opened" folderNames={folderNames} />
-      )}
-      <div className="list-controls" role="group" aria-label="Filter and sort">
+      {!ownsAny && !searching && <Onboarding />}
+      <div className="list-controls" role="group" aria-label="Search, filter and sort">
+        {docs.length > 0 && (
+          <div role="search" className="doc-search">
+            <label htmlFor="doc-search">Search documents</label>
+            <div className="doc-search-field">
+              <input
+                id="doc-search"
+                ref={searchInput}
+                type="search"
+                value={query}
+                maxLength={200}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Titles and text, e.g. K-4392"
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && query) {
+                    e.preventDefault();
+                    setQuery("");
+                  }
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    searchInput.current?.focus();
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {docs.length > 0 && (
           <div className="control">
             {/* Explicit for/id: a <select> nested in its <label> adds its value to the name. */}
@@ -351,7 +518,7 @@ export function DocumentList() {
         <button type="button" className="link-button" onClick={() => setFoldersOpen(true)}>
           Manage folders
         </button>
-        {docs.length > 1 && (
+        {docs.length > 1 && !searching && (
           <label>
             Sort by{" "}
             <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
@@ -384,22 +551,38 @@ export function DocumentList() {
           </button>
         )}
       </div>
-      <Section
-        title="Owned by me"
-        docs={owned}
-        empty={filtering ? noMatch : "No documents yet. Create one to get started."}
-        when={when}
-        folderNames={folder === null ? folderNames : undefined}
-      />
-      <Section
-        title="Shared with me"
-        docs={sorted.filter((d) => d.permission !== "owner")}
-        empty={filtering ? noMatch : "Nothing has been shared with you yet."}
-        when={when}
-        folderNames={folder === null ? folderNames : undefined}
-      />
+      {/* Always in the DOM (empty when idle) so screen readers announce each new count. */}
+      <p
+        role="status"
+        className={search.results?.length === 0 ? "search-status empty" : "search-status"}
+      >
+        {status}
+      </p>
+      {!filtering && !searching && recent.length > 0 && (
+        <Section title="Recently opened" docs={recent} when="opened" folderNames={folderNames} />
+      )}
+      {searching ? (
+        <SearchResults search={search} folderNames={folderNames} />
+      ) : (
+        <>
+          <Section
+            title="Owned by me"
+            docs={owned}
+            empty={filtering ? noMatch : "No documents yet. Create one to get started."}
+            when={when}
+            folderNames={folder === null ? folderNames : undefined}
+          />
+          <Section
+            title="Shared with me"
+            docs={sorted.filter((d) => d.permission !== "owner")}
+            empty={filtering ? noMatch : "Nothing has been shared with you yet."}
+            when={when}
+            folderNames={folder === null ? folderNames : undefined}
+          />
+          <ArchivedSection onRestored={load} />
+        </>
+      )}
       <FoldersDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} folders={folders} onChanged={load} />
-      <ArchivedSection onRestored={load} />
     </div>
   );
 }
