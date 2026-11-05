@@ -14,11 +14,10 @@ services:
     # Non-editable install: an editable install once kept serving stale code after a
     # "successful" deploy (#30). /health/live reports the served commit.
     buildCommand: pip install -r requirements.lock && pip install --no-deps .
-    # Migrations and the idempotent demo seed run before the server binds. Free plans do not
-    # support preDeployCommand; move both there on a paid plan.
+    # Migrations run before the server binds (free web plans have no preDeployCommand).
+    # No demo seed: demo auth is disabled in production (ADR-009).
     startCommand: >-
       alembic upgrade head &&
-      python scripts/seed_demo.py &&
       uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
     healthCheckPath: /health/ready
     envVars:

@@ -61,8 +61,11 @@ Saving is manual: **autosave is not available yet** (planned for a future releas
 [#27](https://github.com/solaranoir/docs_dup_exercise/issues/27)). The status indicator shows
 unsaved changes, and the app warns before you leave with unsaved edits.
 
-Demo login: `POST /api/demo/login {"login_key": "alice"}` sets an httpOnly signed session
-cookie and also returns a bearer token (for API tests). `GET /api/me` returns the principal.
+Demo login (local development and tests only; needs `ENABLE_DEMO_AUTH=true`, which
+`.env.example` sets and production refuses): `POST /api/demo/login {"login_key": "alice"}` starts
+a server-side session in an httpOnly cookie. `GET /api/me` returns the principal, and
+`POST /api/auth/logout` ends the session. Writes from a browser must come from an origin in
+`CORS_ORIGINS` (CSRF check, ADR-009).
 
 ## Tests and checks
 

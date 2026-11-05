@@ -6,10 +6,12 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.csrf import is_cross_site
 from app.observability import configure_logging, request_id_var
-from app.routes import attachments, demo, documents, grants, health, imports
+from app.routes import account, attachments, demo, documents, grants, health, imports
 
 access_log = logging.getLogger("app.access")
 _SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -27,6 +29,17 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "If-Match", "X-Request-ID"],
     )
 
+    trusted_origins = settings.trusted_origins
+
+    @app.middleware("http")
+    async def csrf_guard(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if is_cross_site(request, trusted_origins):
+            return JSONResponse({"detail": "Cross-site request blocked"}, status_code=403)
+        return await call_next(request)
+
+    # Registered last = outermost, so blocked requests still get a request id and a log line.
     @app.middleware("http")
     async def request_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -59,7 +72,9 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health.router)
-    app.include_router(demo.router)
+    app.include_router(account.router)
+    if settings.demo_auth_enabled:
+        app.include_router(demo.router)
     app.include_router(documents.router)
     app.include_router(imports.router)
     app.include_router(attachments.router)

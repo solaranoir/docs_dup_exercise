@@ -4,8 +4,14 @@ export type Permission = "owner" | "editor" | "viewer";
 
 export interface User {
   id: number;
-  login_key: string;
   display_name: string;
+  email: string | null;
+  login_key: string | null;
+}
+
+/** Seeded identity from the local/test-only demo switcher (ADR-004). */
+export interface DemoUser extends User {
+  login_key: string;
 }
 
 export interface DocumentSummary {
@@ -82,9 +88,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   me: () => request<User>("GET", "/api/me"),
-  demoUsers: () => request<User[]>("GET", "/api/demo/users"),
+  demoUsers: () => request<DemoUser[]>("GET", "/api/demo/users"),
   login: (login_key: string) => request<{ user: User }>("POST", "/api/demo/login", { login_key }),
-  logout: () => request<void>("POST", "/api/demo/logout"),
+  logout: () => request<void>("POST", "/api/auth/logout"),
   listDocuments: () => request<DocumentSummary[]>("GET", "/api/documents"),
   createDocument: (title?: string) =>
     request<DocumentFull>("POST", "/api/documents", title ? { title } : {}),

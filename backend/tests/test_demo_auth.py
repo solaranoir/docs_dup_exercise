@@ -25,7 +25,7 @@ def test_identity_switch(client: TestClient, login) -> None:  # type: ignore[no-
 def test_cookie_session(client: TestClient) -> None:
     client.post("/api/demo/login", json={"login_key": "bob"})
     assert client.get("/api/me").json()["login_key"] == "bob"
-    client.post("/api/demo/logout")
+    client.post("/api/auth/logout")
     assert client.get("/api/me").status_code == 401
 
 
@@ -36,7 +36,7 @@ def test_unknown_user_rejected(client: TestClient) -> None:
 def test_unauthenticated_and_tampered_tokens_rejected(client: TestClient, login) -> None:  # type: ignore[no-untyped-def]
     assert client.get("/api/me").status_code == 401
     headers = login("alice")
-    headers["Authorization"] += "x"
+    headers["Cookie"] += "x"
     client.cookies.clear()
     assert client.get("/api/me", headers=headers).status_code == 401
 
