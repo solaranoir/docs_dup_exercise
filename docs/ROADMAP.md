@@ -12,6 +12,7 @@ repository keeps its name. The MVP delivery history is in [PLAN.md](PLAN.md).
 | Authentication | OAuth (GitHub + Google), server-side sessions | [ADR-009](adr/0009-oauth-allowlist-authentication.md) |
 | Signup | Invite allowlist only during v0.5 | ADR-009 |
 | Database | Render Postgres upgraded to a paid plan (2026-11-04); demo data disposable, removed at cut-over | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) |
+| Folders and tags | Personal per user; one-level folders, one per document; sharing stays per document; free-form tags with a starter set | [ADR-010](adr/0010-personal-folders-and-tags.md) |
 | Stack | Keep React/Tiptap, FastAPI, PostgreSQL, R2; no Redis, CRDT or AI in v1.0 | roadmap §9 |
 
 ## Releases

@@ -139,6 +139,51 @@ class DocumentVisit(Base):
     last_opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Folder(Base):
+    """A user's private, one-level folder (ADR-010). Names are unique per user, ignoring case."""
+
+    __tablename__ = "folders"
+    __table_args__ = (CheckConstraint("length(name) BETWEEN 1 AND 60", name="ck_folders_name_len"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DocumentFolder(Base):
+    """Where a user filed a document: at most one folder per (user, document)."""
+
+    __tablename__ = "document_folders"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    folder_id: Mapped[int] = mapped_column(ForeignKey("folders.id", ondelete="CASCADE"), index=True)
+
+
+class DocumentTag(Base):
+    """One of a user's private tags on a document (normalised lowercase, ADR-010)."""
+
+    __tablename__ = "document_tags"
+    __table_args__ = (
+        CheckConstraint(
+            "tag = lower(tag) AND length(tag) BETWEEN 1 AND 32", name="ck_document_tags_tag"
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    tag: Mapped[str] = mapped_column(String(32), primary_key=True)
+
+
 class DocumentGrant(Base):
     __tablename__ = "document_grants"
     __table_args__ = (

@@ -11,7 +11,17 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.csrf import is_cross_site
 from app.observability import configure_logging, request_id_var
-from app.routes import account, attachments, demo, documents, grants, health, imports, oauth
+from app.routes import (
+    account,
+    attachments,
+    demo,
+    documents,
+    grants,
+    health,
+    imports,
+    oauth,
+    organize,
+)
 
 access_log = logging.getLogger("app.access")
 _SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -80,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(imports.router)
     app.include_router(attachments.router)
     app.include_router(grants.router)
+    app.include_router(organize.router)
     return app
 
 

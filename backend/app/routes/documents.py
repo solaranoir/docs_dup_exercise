@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import or_, select, update
+from sqlalchemy import exists, false, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -17,11 +17,14 @@ from app.models import (
     EMPTY_DOC,
     Attachment,
     Document,
+    DocumentFolder,
     DocumentGrant,
+    DocumentTag,
     DocumentVisit,
     User,
     utcnow,
 )
+from app.organization import normalize_tag, organization_for, set_folder, set_tags
 from app.policy import Permission, can_delete, can_edit, can_read, permission_for
 from app.search import MAX_QUERY_LENGTH, match_and_rank, query_terms, snippet
 from app.storage import Storage, StorageError, optional_storage
@@ -86,6 +89,9 @@ class DocumentSummary(BaseModel):
     archived_at: datetime | None
     # When the *caller* last opened it; drives "Recently opened" (DOC-022).
     last_opened_at: datetime | None = None
+    # The caller's own folder and tags (ADR-010); never anyone else's.
+    folder_id: int | None = None
+    tags: list[str] = []
 
 
 class DocumentOut(DocumentSummary):
@@ -114,14 +120,24 @@ def _summary(
 
 
 def document_out(
-    db: Session, doc: Document, permission: Permission, last_opened_at: datetime | None = None
+    db: Session,
+    doc: Document,
+    permission: Permission,
+    last_opened_at: datetime | None = None,
+    *,
+    viewer: User | None = None,
 ) -> DocumentOut:
+    """With ``viewer``, includes that user's own folder and tags for the document."""
     owner = db.get(User, doc.owner_id)
     assert owner is not None
-    return DocumentOut(
+    out = DocumentOut(
         **_summary(doc, owner, permission, last_opened_at).model_dump(),
         content_json=doc.content_json,
     )
+    if viewer is not None:
+        folders, tags = organization_for(db, viewer, [doc.id])
+        out.folder_id, out.tags = folders.get(doc.id), tags.get(doc.id, [])
+    return out
 
 
 def load_document(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document, Permission]:
@@ -170,10 +186,39 @@ def list_documents(user: CurrentUser, db: DB, archived: bool = False) -> list[Do
     ).all()
     items = [_summary(d, o, "owner", v) for d, o, v in owned]
     items += [_summary(d, o, "editor" if r == "editor" else "viewer", v) for d, o, r, v in shared]
+    folders, tags = organization_for(db, user, [i.id for i in items])
+    for item in items:
+        item.folder_id, item.tags = folders.get(item.id), tags.get(item.id, [])
     return sorted(items, key=lambda s: s.updated_at, reverse=True)
 
 
 SEARCH_LIMIT = 50
+
+
+def _organisation_filters(user: User, folder: str | None, tag: str | None) -> list[Any]:
+    """SQL conditions for the caller's own folder/tag (ADR-010). Unknown tags match nothing."""
+    conditions: list[Any] = []
+    if folder is not None:
+        filed = exists().where(
+            DocumentFolder.user_id == user.id, DocumentFolder.document_id == Document.id
+        )
+        if folder == "unfiled":
+            conditions.append(~filed)
+        else:
+            conditions.append(filed.where(DocumentFolder.folder_id == int(folder)))
+    if tag:
+        try:
+            normalized = normalize_tag(tag)
+        except ValueError:
+            return [false()]
+        conditions.append(
+            exists().where(
+                DocumentTag.user_id == user.id,
+                DocumentTag.document_id == Document.id,
+                DocumentTag.tag == normalized,
+            )
+        )
+    return conditions
 
 
 @router.get("/search")
@@ -181,15 +226,20 @@ def search_documents(
     user: CurrentUser,
     db: DB,
     q: Annotated[str, Query(max_length=MAX_QUERY_LENGTH)] = "",
+    folder: Annotated[str | None, Query(pattern=r"^(\d{1,9}|unfiled)$")] = None,
+    tag: Annotated[str | None, Query(max_length=100)] = None,
 ) -> list[SearchResult]:
     """Title and body search over the caller's own and shared, unarchived documents (DOC-017).
 
     The permission filter is part of the SQL, before the LIMIT, so other users' documents can
     never appear, be counted or contribute snippets. Best matches first, at most SEARCH_LIMIT.
+    ``folder`` (an id or ``unfiled``) and ``tag`` narrow to the caller's *own* organisation
+    (ADR-010), also in SQL before the LIMIT.
     """
     terms = query_terms(q)
     if not terms:
         return []
+    filters = _organisation_filters(user, folder, tag)
     match, order = match_and_rank(db.get_bind().dialect.name, terms)
     shared_with_me = (DocumentGrant.document_id == Document.id) & (
         DocumentGrant.grantee_id == user.id
@@ -205,16 +255,19 @@ def search_documents(
             or_(Document.owner_id == user.id, DocumentGrant.id.is_not(None)),
             Document.archived_at.is_(None),
             match,
+            *filters,
         )
         .order_by(*order, Document.id)
         .limit(SEARCH_LIMIT)
     ).all()
+    folders, tags = organization_for(db, user, [doc.id for doc, *_ in rows])
     results = []
     for doc, owner, role, opened in rows:
         permission: Permission = (
             "owner" if doc.owner_id == user.id else "editor" if role == "editor" else "viewer"
         )
         summary = _summary(doc, owner, permission, opened)
+        summary.folder_id, summary.tags = folders.get(doc.id), tags.get(doc.id, [])
         results.append(
             SearchResult(**summary.model_dump(), snippet=snippet(doc.search_text, terms))
         )
@@ -232,7 +285,7 @@ def create_document(body: DocumentCreate, user: CurrentUser, db: DB) -> Document
 @router.get("/{doc_id}")
 def get_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
     doc, permission = load_document(db, user, doc_id)
-    return document_out(db, doc, permission, _record_visit(db, user, doc))
+    return document_out(db, doc, permission, _record_visit(db, user, doc), viewer=user)
 
 
 @router.patch("/{doc_id}")
@@ -246,7 +299,7 @@ def update_document(
     if body.content_json is not None:
         values["content_json"] = body.content_json
     apply_update(db, doc, body.expected_revision, values)
-    return document_out(db, doc, permission)
+    return document_out(db, doc, permission, viewer=user)
 
 
 def load_editable(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document, Permission]:
@@ -273,7 +326,7 @@ def archive_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOu
     doc = _load_owned(db, user, doc_id)
     if doc.archived_at is None:
         _set_archived(db, doc, utcnow())
-    return document_out(db, doc, "owner")
+    return document_out(db, doc, "owner", viewer=user)
 
 
 @router.post("/{doc_id}/restore")
@@ -281,7 +334,7 @@ def restore_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOu
     doc = _load_owned(db, user, doc_id)
     if doc.archived_at is not None:
         _set_archived(db, doc, None)
-    return document_out(db, doc, "owner")
+    return document_out(db, doc, "owner", viewer=user)
 
 
 def _set_archived(db: Session, doc: Document, when: datetime | None) -> None:
@@ -303,15 +356,21 @@ def copy_title(title: str) -> str:
 def duplicate_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> DocumentOut:
     """Anyone who can read a document can copy it into a new document they own (DOC-020).
 
-    Title and content are copied; attachments, sharing and archive state are not.
+    Title and content are copied, and the caller's own folder and tags (ADR-010); attachments,
+    sharing and archive state are not.
     """
     source, _ = load_document(db, user, doc_id)
     copy = Document(
         owner_id=user.id, title=copy_title(source.title), content_json=source.content_json
     )
     db.add(copy)
+    db.flush()
+    # The copy is filed and tagged like the source *in the duplicating user's own view*.
+    folders, tags = organization_for(db, user, [source.id])
+    set_folder(db, user, copy.id, folders.get(source.id))
+    set_tags(db, user, copy.id, tags.get(source.id, []))
     db.commit()
-    return document_out(db, copy, "owner")
+    return document_out(db, copy, "owner", viewer=user)
 
 
 def apply_update(

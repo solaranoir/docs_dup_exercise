@@ -31,6 +31,20 @@ export interface DocumentSummary {
   archived_at: string | null;
   /** When the signed-in user last opened it (DOC-022). */
   last_opened_at: string | null;
+  /** The signed-in user's own folder and tags (ADR-010); nobody else sees them. */
+  folder_id: number | null;
+  tags: string[];
+}
+
+export interface Folder {
+  id: number;
+  name: string;
+  document_count: number;
+}
+
+export interface TagSummary {
+  tags: { tag: string; count: number }[];
+  suggestions: string[];
 }
 
 /** A search hit (DOC-017): plain text around the first body match, or the opening lines. */
@@ -96,7 +110,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const detail = (data as { detail?: unknown } | null)?.detail ?? res.statusText;
-    throw new ApiError(res.status, Array.isArray(detail) ? detail.map((d) => d.msg).join("; ") : detail);
+    throw new ApiError(res.status, Array.isArray(detail) ? detail.map((d) => String(d.msg).replace(/^Value error, /, "")).join("; ") : detail);
   }
   return data as T;
 }
@@ -111,11 +125,24 @@ export const api = {
   listDocuments: (archived = false) =>
     request<DocumentSummary[]>("GET", archived ? "/api/documents?archived=true" : "/api/documents"),
   /** Own and shared, unarchived documents matching every word; best first, at most 50. */
-  searchDocuments: (q: string) =>
-    request<SearchResult[]>("GET", `/api/documents/search?q=${encodeURIComponent(q)}`),
+  searchDocuments: (q: string, filters: { folder?: string | null; tag?: string | null } = {}) => {
+    const params = new URLSearchParams({ q });
+    if (filters.folder) params.set("folder", filters.folder);
+    if (filters.tag) params.set("tag", filters.tag);
+    return request<SearchResult[]>("GET", `/api/documents/search?${params}`);
+  },
   archiveDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/archive`),
   restoreDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/restore`),
   duplicateDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/duplicate`),
+  listFolders: () => request<Folder[]>("GET", "/api/folders"),
+  createFolder: (name: string) => request<Folder>("POST", "/api/folders", { name }),
+  renameFolder: (id: number, name: string) => request<Folder>("PATCH", `/api/folders/${id}`, { name }),
+  deleteFolder: (id: number) => request<void>("DELETE", `/api/folders/${id}`),
+  listTags: () => request<TagSummary>("GET", "/api/tags"),
+  setFolder: (id: string, folderId: number | null) =>
+    request<{ folder_id: number | null }>("PUT", `/api/documents/${id}/folder`, { folder_id: folderId }),
+  setTags: (id: string, tags: string[]) =>
+    request<{ tags: string[] }>("PUT", `/api/documents/${id}/tags`, { tags }),
   createDocument: (title?: string) =>
     request<DocumentFull>("POST", "/api/documents", title ? { title } : {}),
   getDocument: (id: string) => request<DocumentFull>("GET", `/api/documents/${id}`),

@@ -70,4 +70,4 @@ async def import_into_document(
         existing = [n for n in doc.content_json.get("content", []) if n != {"type": "paragraph"}]
         content = {"type": "doc", "content": existing + content["content"]}
     apply_update(db, doc, expected_revision, {"content_json": content})
-    return ImportApplied(document=document_out(db, doc, permission), warnings=warnings)
+    return ImportApplied(document=document_out(db, doc, permission, viewer=user), warnings=warnings)

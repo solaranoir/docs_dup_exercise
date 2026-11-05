@@ -4,6 +4,7 @@ import { api, ApiError, type DocumentFull } from "../api";
 import { AttachmentsPanel } from "../components/AttachmentsPanel";
 import { ImportDialog } from "../components/ImportDialog";
 import { KeyboardHelp } from "../components/KeyboardHelp";
+import { OrganizePanel } from "../components/OrganizePanel";
 import { SaveStatus, type SaveState } from "../components/SaveStatus";
 import { ShareDialog } from "../components/ShareDialog";
 import { displayShortcut, Toolbar, TOOLBAR_SHORTCUT } from "../components/Toolbar";
@@ -212,6 +213,7 @@ function DocumentEditor({
           markDirty();
         }}
       />
+      <OrganizePanel doc={initial} />
       {archived && (
         <div className="notice notice-archived" role="note">
           <span>

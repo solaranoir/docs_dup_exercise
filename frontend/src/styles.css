@@ -241,7 +241,7 @@ input, textarea { color: var(--text); }
 .modal { background: var(--surface); border-color: var(--border); border-radius: var(--radius); box-shadow: 0 28px 100px rgb(0 0 0 / 0.55); padding: 24px 28px; }
 .modal::backdrop { background: rgb(3 12 18 / 0.78); backdrop-filter: blur(4px); }
 .modal-head h2 { font-size: 1.3rem; }
-.field input:not([type="radio"]):not([type="file"]), .share-form input {
+.field input:not([type="radio"]):not([type="file"]), .share-form input, .tag-editor input, .folder-form input {
   background: var(--bg); color: var(--text); border: 1px solid var(--control-border);
   border-radius: var(--radius-sm); padding: 10px 12px; font: inherit;
 }
@@ -264,14 +264,16 @@ input, textarea { color: var(--text); }
 .loading { padding: 22px; color: var(--muted); }
 
 /* Organisation (DOC-019..022) */
-.list-controls { display: flex; justify-content: flex-end; margin: 4px 0 -8px; }
+.list-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 4px 0 0; }
 .list-controls label { color: var(--muted); font-size: 0.92rem; display: flex; gap: 8px; align-items: center; }
+.list-controls .control { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 0.92rem; }
 .doc-list li > button { padding: 6px 12px; font-size: 0.9rem; }
 .archived { margin-top: 28px; }
 
 /* Search (DOC-017) */
-.list-controls { justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px 20px; }
-.doc-search { flex: 1 1 320px; max-width: 520px; min-width: 0; }
+/* Search gets its own line; folder, sort and tag filters follow, left-aligned. */
+.list-controls { align-items: center; gap: 12px 20px; }
+.doc-search { flex: 1 1 100%; max-width: 640px; min-width: 0; }
 .doc-search label { display: block; color: var(--muted); font-size: 0.92rem; margin-bottom: 6px; }
 .doc-search-field { display: flex; gap: 8px; }
 .doc-search input {
@@ -295,6 +297,45 @@ input, textarea { color: var(--text); }
   display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
   border-color: var(--warn); background: rgb(232 182 107 / 0.1);
 }
+
+/* Personal folders and tags (DOC-016, DOC-018) */
+.tag-filters { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.tag {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; line-height: 1.2;
+  padding: 2px 9px; border-radius: 999px; border: 1px solid var(--control-border); color: var(--muted);
+}
+button.tag-filter { cursor: pointer; background: transparent; min-height: 30px; font-weight: 600; }
+button.tag-filter[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.doc-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.doc-folder { font-size: 0.8rem; color: var(--muted); }
+.organize {
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-start; margin: 4px 0 14px;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+}
+.organize label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+.organize-folder select { min-width: 180px; }
+.organize-note { width: 100%; margin: 0; font-size: 0.8rem; color: var(--muted); }
+.tag-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 260px; }
+.tag-editor > label { width: 100%; }
+.tag-chips { display: contents; list-style: none; }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 2px; font-size: 0.85rem; padding: 2px 4px 2px 10px;
+  border-radius: 999px; background: var(--surface-raised); border: 1px solid var(--control-border); color: var(--text);
+}
+.tag-chip button { border: 0; background: none; padding: 0 6px; min-height: 26px; color: var(--muted); font-size: 1rem; }
+.tag-chip button:hover { color: var(--text); background: none; }
+.tag-editor input { flex: 1 1 140px; min-width: 0; max-width: 100%; padding: 6px 10px; }
+.tag-editor input::-webkit-calendar-picker-indicator { display: none !important; }
+.field-error { width: 100%; margin: 0; color: var(--danger); font-size: 0.85rem; }
+.folder-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin: 12px 0; }
+.folder-form label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; color: var(--muted); font-size: 0.9rem; }
+.folder-list { list-style: none; padding: 0; margin: 8px 0 0; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.folder-list li { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); }
+.folder-list li:first-child { border-top: 0; }
+.folder-list li > form { width: 100%; margin: 0; }
+.folder-name { flex: 1 1 auto; font-weight: 600; }
+.folder-count { color: var(--muted); font-size: 0.85rem; min-width: 2ch; text-align: right; }
+.folder-list button { padding: 4px 10px; font-size: 0.85rem; }
 
 /* Keyboard access (DOC-015) */
 .skip-link {
