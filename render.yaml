@@ -35,6 +35,15 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         sync: false # JSON list, e.g. ["https://docworkspace-web.onrender.com"]
+      # OAuth sign-in (ADR-009). Callback: https://docworkspace-web.onrender.com/api/auth/{github,google}/callback
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       # Attachment storage (Cloudflare R2). Values are set in the dashboard, never in git.
       - key: STORAGE_ENDPOINT
         sync: false

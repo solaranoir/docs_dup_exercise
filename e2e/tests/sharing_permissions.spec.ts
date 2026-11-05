@@ -9,7 +9,7 @@ const NAMES: Record<DemoUser, string> = {
 
 async function switchTo(page: Page, user: DemoUser) {
   await page.goto("/#/");
-  await page.getByRole("button", { name: "Switch user" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: NAMES[user] }).click();
   await expect(page.getByText(`Signed in as ${NAMES[user]}`)).toBeVisible();
 }

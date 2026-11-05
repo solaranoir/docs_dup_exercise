@@ -88,7 +88,7 @@ test("stale save shows a conflict with a recovery path", async ({ page, context 
 test("documents of other users are not reachable", async ({ page }) => {
   await loginAs(page, "alice");
   const url = await newDocument(page);
-  await page.getByRole("button", { name: "Switch user" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: /^Charlie/ }).click();
   await expect(page.getByText("Charlie (no access)")).toBeVisible();
   await page.goto(url);
