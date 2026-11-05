@@ -263,6 +263,27 @@ input, textarea { color: var(--text); }
 .login-back { display: inline-block; margin-top: 20px; font-size: 0.9rem; }
 .loading { padding: 22px; color: var(--muted); }
 
+/* Keyboard access (DOC-015) */
+.skip-link {
+  position: absolute; left: 12px; top: -100px; z-index: 100; padding: 10px 14px;
+  background: var(--accent); color: var(--accent-text); border-radius: var(--radius-sm); font-weight: 700;
+}
+.skip-link:focus { top: 12px; }
+main:focus { outline: none; } /* focused programmatically after navigation; not interactive */
+.keyboard-help { margin-top: 12px; color: var(--muted); font-size: 0.92rem; }
+.keyboard-help summary { cursor: pointer; color: var(--link); width: fit-content; }
+.keyboard-help dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 20px; margin: 12px 0 0; }
+.keyboard-help dl > div { display: flex; gap: 10px; align-items: baseline; }
+.keyboard-help dt { flex: 0 0 auto; }
+.keyboard-help dd { margin: 0; }
+kbd {
+  font: 600 0.85em ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap;
+  padding: 2px 6px; border: 1px solid var(--control-border); border-bottom-width: 2px;
+  border-radius: 5px; color: var(--text); background: var(--bg);
+}
+.not-found { max-width: 60ch; }
+.not-found p { color: var(--muted); }
+
 /* Phones and small tablets (DOC-012) */
 @media (max-width: 680px) {
   main { padding: 20px 14px 64px; }

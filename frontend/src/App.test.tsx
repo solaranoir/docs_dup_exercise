@@ -12,7 +12,7 @@ describe("App header", () => {
     render(<App />);
     const back = await screen.findByRole("link", { name: "Solara Radio Tools" });
     expect(back).toHaveAttribute("href", "https://solararadio.netlify.app/tools");
-    expect(screen.getByRole("link", { name: /Solara Docs/ })).toHaveAttribute("href", "#/");
+    expect(screen.getByRole("link", { name: /Solara Docs/ })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 });

@@ -3,12 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type DocumentFull } from "../api";
 import { AttachmentsPanel } from "../components/AttachmentsPanel";
 import { ImportDialog } from "../components/ImportDialog";
+import { KeyboardHelp } from "../components/KeyboardHelp";
 import { SaveStatus, type SaveState } from "../components/SaveStatus";
 import { ShareDialog } from "../components/ShareDialog";
-import { Toolbar } from "../components/Toolbar";
+import { displayShortcut, Toolbar, TOOLBAR_SHORTCUT } from "../components/Toolbar";
 import { normalizeContent } from "../content";
 import { extensions } from "../editorExtensions";
-import { navigate, navigationGuard } from "../router";
+import { Link } from "../components/Link";
+import { navigationGuard, paths } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
 
 export function EditorPage({ id }: { id: string }) {
@@ -25,7 +27,7 @@ export function EditorPage({ id }: { id: string }) {
     return (
       <div className="editor-page">
         <p role="alert">{error}</p>
-        <a href="#/">Back to documents</a>
+        <Link to={paths.list}>Back to documents</Link>
       </div>
     );
   if (!doc) return <p className="loading">Loading…</p>;
@@ -55,7 +57,15 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
     content: initial.content_json,
     editable: !readOnly,
     onUpdate: markDirty,
-    editorProps: { attributes: { "aria-label": "Document body", class: "editor-body" } },
+    editorProps: {
+      attributes: {
+        "aria-label": "Document body",
+        class: "editor-body",
+        role: "textbox",
+        "aria-multiline": "true",
+        ...(readOnly ? { "aria-readonly": "true" } : { "aria-describedby": "editor-keyboard-hint" }),
+      },
+    },
   });
 
   const dirty = saveState !== "saved";
@@ -122,9 +132,9 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
   return (
     <div className="editor-page">
       <div className="editor-head">
-        <a href="#/" onClick={(e) => (e.preventDefault(), navigate("#/"))}>
-          ← Documents
-        </a>
+        <Link to={paths.list}>
+          <span aria-hidden="true">← </span>Documents
+        </Link>
         {readOnly ? (
           <span className="badge badge-viewer">View only · shared by {initial.owner.display_name}</span>
         ) : (
@@ -171,7 +181,13 @@ function DocumentEditor({ initial }: { initial: DocumentFull }) {
         </div>
       )}
       {editor && !readOnly && <Toolbar editor={editor} />}
+      {!readOnly && (
+        <p id="editor-keyboard-hint" className="visually-hidden">
+          Press {displayShortcut(TOOLBAR_SHORTCUT)} to move to the formatting toolbar.
+        </p>
+      )}
       <EditorContent editor={editor} className="editor" />
+      {!readOnly && <KeyboardHelp />}
       <AttachmentsPanel documentId={initial.id} canEdit={!readOnly} />
       {!readOnly && (
         <ImportDialog

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { api, type DocumentSummary } from "../api";
-import { navigate } from "../router";
+import { Link } from "../components/Link";
+import { navigate, paths } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
 
 const ImportDialog = lazy(() =>
@@ -19,7 +20,7 @@ function Section({ title, docs, empty }: { title: string; docs: DocumentSummary[
         <ul className="doc-list">
           {docs.map((d) => (
             <li key={d.id}>
-              <a href={`#/doc/${d.id}`}>{d.title}</a>
+              <Link to={paths.doc(d.id)}>{d.title}</Link>
               {d.permission !== "owner" && (
                 <span className={`badge badge-${d.permission}`}>
                   {d.permission === "viewer" ? "View only" : "Can edit"} · {d.owner.display_name}
@@ -82,7 +83,7 @@ export function DocumentList() {
 
   const createNew = async () => {
     const doc = await api.createDocument();
-    navigate(`#/doc/${doc.id}`);
+    navigate(paths.doc(doc.id));
   };
 
   if (error) return <p role="alert">{error}</p>;
@@ -109,7 +110,7 @@ export function DocumentList() {
           <ImportDialog
             open={importOpen}
             onClose={() => setImportOpen(false)}
-            target={{ kind: "new", onCreated: (doc) => navigate(`#/doc/${doc.id}`) }}
+            target={{ kind: "new", onCreated: (doc) => navigate(paths.doc(doc.id)) }}
           />
         </Suspense>
       )}

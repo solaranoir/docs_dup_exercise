@@ -68,6 +68,11 @@ services:
       - type: rewrite
         source: /api/*
         destination: https://docworkspace-api.onrender.com/api/*
+      # SPA fallback for path routes (/doc/:id, DOC-013). Render serves real files (assets,
+      # favicon) first and applies rewrites in order, so /api/* above still wins.
+      - type: rewrite
+        source: /*
+        destination: /index.html
     headers:
       - path: /*
         name: X-Frame-Options
