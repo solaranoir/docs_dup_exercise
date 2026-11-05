@@ -5,6 +5,9 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+# Before any app import: the suite drives the demo identity switcher (off by default).
+os.environ.setdefault("ENABLE_DEMO_AUTH", "true")
+
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -89,6 +92,8 @@ def login(client: TestClient):  # type: ignore[no-untyped-def]
     def _login(key: str) -> dict[str, str]:
         r = client.post("/api/demo/login", json={"login_key": key})
         assert r.status_code == 200, r.text
-        return {"Authorization": f"Bearer {r.json()['token']}"}
+        # An explicit Cookie header wins over the client's jar, so tests can act as
+        # several users at once.
+        return {"Cookie": f"sd_session={r.cookies['sd_session']}"}
 
     return _login

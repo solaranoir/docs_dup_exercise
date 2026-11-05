@@ -25,6 +25,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://docworkspace:docworkspace@localhost:5432/docworkspace
       TEST_DATABASE_URL: postgresql+psycopg://docworkspace:docworkspace@localhost:5432/docworkspace
+      ENABLE_DEMO_AUTH: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

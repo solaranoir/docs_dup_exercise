@@ -16,6 +16,8 @@ const storageEnv = {
   // The suite logs in far more than a person would; production limits are tested in pytest.
   LOGIN_RATE_LIMIT_PER_MINUTE: "1000",
   UPLOAD_RATE_LIMIT_PER_MINUTE: "1000",
+  // The suite signs in with the seeded demo identities (never enabled in production).
+  ENABLE_DEMO_AUTH: "true",
 };
 
 export default defineConfig({

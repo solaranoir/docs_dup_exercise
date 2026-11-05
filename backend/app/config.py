@@ -10,8 +10,16 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "postgresql+psycopg://docworkspace:docworkspace@localhost:5432/docworkspace"
     session_secret: str = "dev-only-insecure-secret-change-me"  # noqa: S105
-    session_max_age_seconds: int = 60 * 60 * 12
+    # Server-side sessions (ADR-009): idle timeout, absolute lifetime, and how often
+    # last_seen_at is refreshed (avoids a write on every request).
+    session_idle_seconds: int = 60 * 60 * 24 * 7
+    session_absolute_seconds: int = 60 * 60 * 24 * 30
+    session_touch_seconds: int = 60 * 5
+    # Browser origins allowed for CORS *and* for unsafe methods (CSRF origin check).
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Seeded Alice/Bob/Charlie switcher (ADR-004). Local development and tests only;
+    # never honoured in production.
+    enable_demo_auth: bool = False
 
     # S3-compatible attachment storage (ADR-005). Unset bucket = attachments unavailable (503).
     storage_endpoint: str | None = None
@@ -47,10 +55,33 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.environment == "production"
 
+    @property
+    def demo_auth_enabled(self) -> bool:
+        return self.enable_demo_auth and not self.is_production
+
+    @property
+    def session_cookie_name(self) -> str:
+        # __Host- requires Secure + Path=/ and no Domain, so sibling subdomains cannot set or
+        # shadow it. Browsers reject Secure cookies over plain http, so dev uses a plain name.
+        return "__Host-sd_session" if self.is_production else "sd_session"
+
+    @property
+    def trusted_origins(self) -> frozenset[str]:
+        return frozenset(o.rstrip("/") for o in self.cors_origins)
+
+    def check_production(self) -> None:
+        if not self.is_production:
+            return
+        if self.session_secret.startswith("dev-only"):
+            raise RuntimeError("SESSION_SECRET must be set in production")
+        if self.enable_demo_auth:
+            raise RuntimeError("ENABLE_DEMO_AUTH must not be set in production")
+        if not self.cors_origins or any(not o.startswith("https://") for o in self.cors_origins):
+            raise RuntimeError("CORS_ORIGINS must list the https:// web origin in production")
+
 
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    if settings.is_production and settings.session_secret.startswith("dev-only"):
-        raise RuntimeError("SESSION_SECRET must be set in production")
+    settings.check_production()
     return settings
