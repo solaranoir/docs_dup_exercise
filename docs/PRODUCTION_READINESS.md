@@ -17,16 +17,16 @@ upgrade.
 
 ## P0 gates — identity and authorization (Phase 1)
 
-- [ ] DOC-001 OAuth sign-in with GitHub and Google works on the deployed site (ADR-009)
+- [x] DOC-001 OAuth sign-in with GitHub and Google works on the deployed site (ADR-009). Owner signed in with both, 2026-11-05 @ `ed73c8b`
 - [ ] DOC-002 Users persist across restarts; a second provider links to the same user by verified email
 - [ ] DOC-002 A non-allowlisted email is refused, and removing an email ends its sessions
-- [ ] DOC-004 `/api/demo/*` returns 404 in production, and the seed does not run there (A1, A2, A4)
+- [x] DOC-004 `/api/demo/*` returns 404 in production, and the seed does not run there (A1, A2, A4). Smoke script, 2026-11-05 @ `1a2beda`
 - [ ] DOC-005 Session cookie is `__Host-`, HttpOnly, Secure, SameSite=Lax, and the token is never in a response body (A6, A8)
 - [ ] DOC-005 Logout invalidates the session server-side, so a replayed cookie gets 401 (A5)
-- [ ] DOC-005 Cross-origin `POST` (including multipart upload) is rejected with 403 (A7)
-- [ ] DOC-003 Sharing is by email of an existing account, and there is no user directory endpoint (A9)
-- [ ] DOC-008 Isolation matrix: every document/attachment/import/grant route × {owner, viewer, stranger, anonymous} returns the expected status (A10)
-- [ ] DOC-006 A stranger gets 404 for attachment list and download, including with a valid attachment id from another document
+- [x] DOC-005 Cross-origin `POST` (including multipart upload) is rejected with 403 (A7). Smoke script, 2026-11-05 @ `1a2beda`
+- [x] DOC-003 Sharing is by email of an existing account, and there is no user directory endpoint (A9). #40
+- [x] DOC-008 Isolation matrix: every document/attachment/import/grant route × {owner, viewer, stranger, anonymous} returns the expected status (A10). `tests/test_isolation.py`, #40
+- [x] DOC-006 A stranger gets 404 for attachment list and download, including with a valid attachment id from another document. `tests/test_isolation.py`, #40
 
 ## P0 gates — data and operations
 
@@ -34,10 +34,12 @@ upgrade.
 - [ ] DOC-007 **Restore drill:** restore the latest dump into a scratch database, run `alembic current`, spot-check a document
 - [ ] DOC-007 R2 bucket is private (no public URL) and its API token is scoped to that bucket only
 - [ ] OAuth client secrets and `SESSION_SECRET` live only in Render env vars, and `.env.example` lists names without values
-- [ ] **Demo-data cleanup at cut-over:** delete the Alice/Bob/Charlie users (`login_key IS NOT NULL`)
-      and, through the cascade, their documents and grants. Delete their attachment objects from R2
-      too, since the database cascade does not reach object storage. Do this before the first invite.
-- [ ] `scripts/smoke_deployed.sh` updated for OAuth (uses a test-only session in CI, or a manual sign-in step) and passing
+- [ ] **Demo-data cleanup at cut-over:** `python scripts/purge_demo_data.py` (dry run), then
+      `--yes` in the Render Shell. Removes Alice/Bob/Charlie, their documents, grants and R2 objects.
+      Do this before the first invite (RUNBOOK → Production cut-over).
+- [x] `scripts/smoke_deployed.sh` updated for OAuth: anonymous/security checks always, and the
+      document journey with `SMOKE_SESSION` (2026-11-05)
+- [ ] `SMOKE_SESSION=… scripts/smoke_deployed.sh` → "All checks passed" on the release commit
 - [ ] Rollback rehearsed: redeploy the previous commit, and migrations stay backward-compatible for one release
 
 ## P1 — before v1.0

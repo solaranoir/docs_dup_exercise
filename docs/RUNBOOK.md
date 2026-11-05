@@ -62,8 +62,11 @@ All three Render resources are managed by the Blueprint (`render.yaml`, branch `
 Set `GITHUB_CLIENT_ID/SECRET` and `GOOGLE_CLIENT_ID/SECRET` on `docworkspace-api`. A provider
 shows on the sign-in page only when both of its values are set (`GET /api/auth/methods`).
 Callbacks use the web origin (first `CORS_ORIGINS` entry, or `PUBLIC_BASE_URL`), so the
-`/api/*` rewrite keeps cookies first-party. A GitHub OAuth app has one callback URL, so local
-development needs a second app. Google accepts several redirect URIs.
+`/api/*` rewrite keeps cookies first-party. Google needs a client of type **Web application**
+(a Desktop client has no redirect URI field), and while its audience is in Testing mode only
+listed test users can sign in. Both providers accept several redirect URIs. Prefer separate
+dev apps or clients (callback `http://localhost:5173/api/auth/{provider}/callback`) so
+laptops never hold the production secrets.
 
 Sign-in failures redirect to `/?auth_error=<reason>` and log
 `sign-in failed provider=… reason=…` (never emails or tokens):
@@ -89,6 +92,32 @@ python scripts/allow_email.py remove someone@example.com   # ends their sessions
 
 Removing an email keeps the user's documents, and re-adding it restores access.
 
+
+## Production cut-over: remove demo data
+
+One-off, after OAuth sign-in works. In the Render API service's **Shell** tab:
+
+```bash
+python scripts/purge_demo_data.py          # dry run: lists demo users, documents, grants, objects
+python scripts/purge_demo_data.py --yes    # deletes them (database first, then R2 objects)
+```
+
+It removes only users with a `login_key` (Alice/Bob/Charlie) and their sessions, documents,
+grants and attachments, including uploads they made into other documents and grants made to
+them. Real (OAuth) accounts are untouched. It refuses to run if a demo user has an OAuth
+identity, or if attachment objects exist while storage is unconfigured. Objects it cannot
+delete from R2 are listed (exit code 1) for manual removal. Re-running it is harmless.
+
+## Smoke test against production
+
+```bash
+scripts/smoke_deployed.sh                                  # anonymous checks only
+SMOKE_SESSION=<__Host-sd_session value> scripts/smoke_deployed.sh   # + document journey
+```
+
+Copy the cookie value from DevTools → Application → Cookies after signing in. It is a live
+session, so don't paste it anywhere shared, and sign out afterwards to end it. Sharing checks
+run only where demo sign-in is enabled (local/CI).
 ## Secrets and configuration
 
 Set on **docworkspace-api** only (never on the static site — its env is baked into public JS):
