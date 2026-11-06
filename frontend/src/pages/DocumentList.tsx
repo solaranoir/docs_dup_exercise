@@ -517,7 +517,7 @@ function Onboarding() {
         </li>
         <li>
           <strong>Attach</strong>
-          <span>Keep logs, photos and data files with the document they belong to.</span>
+          <span>Keep logs and notes (.txt, .md) and Word files with the document they belong to.</span>
         </li>
         <li>
           <strong>Share</strong>

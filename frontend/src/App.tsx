@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { api, ApiError, type User } from "./api";
+import { api, ApiError, resetSessionState, SESSION_EVENT, type User } from "./api";
 import { Link } from "./components/Link";
 import { SOLARA_TOOLS_URL } from "./config";
 import { DocumentList } from "./pages/DocumentList";
@@ -30,6 +30,12 @@ export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const route = useRoute();
   const mainRef = useRef<HTMLElement>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  useEffect(() => {
+    const onSession = (e: Event) => setSessionEnded((e as CustomEvent<string>).detail === "ended");
+    window.addEventListener(SESSION_EVENT, onSession);
+    return () => window.removeEventListener(SESSION_EVENT, onSession);
+  }, []);
   useFocusOnNavigation(routeKey(route), mainRef);
 
   useEffect(() => {
@@ -50,7 +56,21 @@ export function App() {
   }, []);
 
   if (user === undefined) return <p className="loading">Loading…</p>;
-  if (user === null) return <Login onLogin={setUser} />;
+  if (user === null)
+    return (
+      <Login
+        onLogin={(u) => {
+          resetSessionState();
+          setSessionEnded(false);
+          setUser(u);
+        }}
+      />
+    );
+
+  const signInHere = () => {
+    if (!navigate(paths.list)) return; // stayed to keep unsaved edits
+    setUser(null);
+  };
 
   const signOut = async () => {
     if (!navigate(paths.list)) return; // stayed to keep unsaved edits
@@ -80,6 +100,22 @@ export function App() {
           </button>
         </span>
       </header>
+      {sessionEnded && (
+        <div className="session-ended" role="alert">
+          <p>
+            <strong>You've been signed out.</strong> Anything you haven't saved is still on this page.
+            Sign in again in a new tab, then come back here and save.
+          </p>
+          <div className="actions">
+            <a className="button-like primary" href={paths.list} target="_blank" rel="noopener">
+              Sign in in a new tab
+            </a>
+            <button type="button" onClick={signInHere}>
+              Sign in here
+            </button>
+          </div>
+        </div>
+      )}
       <main id="main" ref={mainRef} tabIndex={-1}>
         <Suspense fallback={<p className="loading">Loading editor…</p>}>
           {route.name === "doc" && <EditorPage key={route.id} id={route.id} />}

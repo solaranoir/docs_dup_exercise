@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, type DocumentFull, type Folder } from "../api";
 import { TagEditor } from "./TagEditor";
 
@@ -24,45 +24,81 @@ export function OrganizePanel({ doc }: { doc: DocumentFull }) {
     );
   }, []);
 
-  const save = async (action: () => Promise<void>, message: string) => {
+  // Saves go out one at a time, in order, and only the newest change's answer is applied:
+  // otherwise a quick second tag could be overwritten by the first request's late response,
+  // or the server could apply the requests out of order and keep the stale list. Changes made
+  // while a save is in flight collapse into one follow-up save of the newest value.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const latest = useRef({ tags: 0, folder: 0 });
+  const savedTags = useRef(doc.tags);
+  const savedFolder = useRef(doc.folder_id);
+  const [pending, setPending] = useState(0);
+
+  // Leaving the page (reload, close) mid-save would drop it; in-app navigation is fine.
+  useEffect(() => {
+    if (pending === 0) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
+
+  const enqueue = <T,>(
+    kind: "tags" | "folder",
+    send: () => Promise<T>,
+    onSaved: (result: T) => void,
+    onFailed: () => void,
+    message: string,
+  ) => {
+    const seq = ++latest.current[kind];
     setError(null);
-    try {
-      await action();
-      setSaved(message);
-    } catch (e) {
-      setError((e as Error).message);
-    }
+    setPending((n) => n + 1);
+    queue.current = queue.current.then(async () => {
+      try {
+        if (seq !== latest.current[kind]) return; // superseded before it was sent
+        const result = await send();
+        if (seq === latest.current[kind]) {
+          onSaved(result);
+          setSaved(message);
+        }
+      } catch (e) {
+        if (seq === latest.current[kind]) {
+          onFailed();
+          setError((e as Error).message);
+        }
+      } finally {
+        setPending((n) => n - 1);
+      }
+    });
   };
 
   const changeFolder = (value: string) => {
     const next = value ? Number(value) : null;
-    const previous = folderId;
     setFolderId(next);
-    void save(async () => {
-      try {
-        await api.setFolder(doc.id, next);
-      } catch (e) {
-        setFolderId(previous);
-        throw e;
-      }
-    }, next === null ? "Removed from folder" : `Filed in ${folders.find((f) => f.id === next)?.name}`);
+    enqueue(
+      "folder",
+      () => api.setFolder(doc.id, next),
+      () => (savedFolder.current = next),
+      () => setFolderId(savedFolder.current),
+      next === null ? "Removed from folder" : `Filed in ${folders.find((f) => f.id === next)?.name}`,
+    );
   };
 
   const changeTags = (next: string[]) => {
-    const previous = tags;
     setTags(next);
-    void save(async () => {
-      try {
-        setTags((await api.setTags(doc.id, next)).tags);
-      } catch (e) {
-        setTags(previous);
-        throw e;
-      }
-    }, "Tags saved");
+    enqueue(
+      "tags",
+      () => api.setTags(doc.id, next),
+      (result) => {
+        savedTags.current = result.tags;
+        setTags(result.tags);
+      },
+      () => setTags(savedTags.current),
+      "Tags saved",
+    );
   };
 
   return (
-    <section className="organize" aria-label="Organise (only you see this)">
+    <section className="organize" aria-label="Organise (only you see this)" aria-busy={pending > 0}>
       <div className="organize-folder">
         <label htmlFor={folderSelect}>Folder</label>
         <select id={folderSelect} value={folderId ?? ""} onChange={(e) => changeFolder(e.target.value)}>

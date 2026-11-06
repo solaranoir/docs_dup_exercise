@@ -119,6 +119,35 @@ export class ApiError extends Error {
 // Empty base = same origin (Vite proxy locally, Render rewrite in production).
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
+/**
+ * Session state for the page (Phase 6: session expiry). A 401 from any API call after sign-in
+ * means the session ended (idle or absolute expiry, sign-out elsewhere, invite revoked). The app
+ * shows a banner instead of dropping to the sign-in page, so unsaved edits survive; signing in
+ * again in another tab sets a new cookie, and the next successful call clears the banner.
+ */
+export const SESSION_EVENT = "solara:session";
+let sessionEnded = false;
+
+/** Auth endpoints answer 401 as part of normal sign-in; they never mean "session ended". */
+const isAuthPath = (path: string) => /^\/api\/(me|auth|demo)\b/.test(path);
+
+function noteStatus(path: string, status: number): void {
+  if (status === 401 && !isAuthPath(path)) {
+    if (!sessionEnded) {
+      sessionEnded = true;
+      window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: "ended" }));
+    }
+  } else if (status < 400 && sessionEnded) {
+    sessionEnded = false;
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: "active" }));
+  }
+}
+
+/** Called when the user signs in on this page. */
+export function resetSessionState(): void {
+  sessionEnded = false;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const isForm = body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
@@ -127,6 +156,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body === undefined || isForm ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
   });
+  noteStatus(path, res.status);
   if (res.status === 204) return undefined as T;
   const data: unknown = await res.json().catch(() => null);
   if (!res.ok) {
@@ -157,6 +187,7 @@ async function download(
   fallback: string,
 ): Promise<{ blob: Blob; filename: string; headers: Headers }> {
   const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+  noteStatus(path, res.status);
   if (!res.ok) {
     const data: unknown = await res.json().catch(() => null);
     const detail = (data as { detail?: unknown } | null)?.detail;

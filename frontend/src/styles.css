@@ -444,3 +444,20 @@ kbd {
 .trash-actions button { padding: 4px 10px; font-size: 0.85rem; }
 .notice-flash { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; margin: 12px 0; background: rgb(163 182 141 / 0.12); border-color: var(--control-border); }
 .notice-flash button { padding: 4px 12px; }
+
+/* Session ended (Phase 6) */
+.session-ended {
+  max-width: 1080px; margin: 16px auto 0; padding: 12px 16px; display: flex; gap: 12px 20px;
+  align-items: center; justify-content: space-between; flex-wrap: wrap;
+  /* Opaque, and sticky so it stays in view while someone scrolls the editor (phones). */
+  position: sticky; top: 8px; z-index: 20; box-shadow: var(--shadow);
+  background: linear-gradient(rgb(232 182 107 / 0.14), rgb(232 182 107 / 0.14)), var(--surface-raised);
+  border: 1px solid var(--warn); border-radius: var(--radius-sm);
+}
+.session-ended p { margin: 0; flex: 1 1 320px; }
+@media (max-width: 1128px) { .session-ended { margin: 16px 16px 0; } }
+a.button-like.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; text-decoration: none; }
+
+/* Toolbar list markers: decorative (empty alt text), so not part of the button's name. */
+.list-face-bullet::before { content: "• "; content: "• " / ""; }
+.list-face-number::before { content: "1. "; content: "1. " / ""; }

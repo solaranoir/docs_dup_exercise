@@ -29,6 +29,7 @@ test("personal folders and tags: file, tag, filter by URL, delete folder", async
   await tags.press("Enter");
   await expect(organise.getByRole("button", { name: "Remove tag pota" })).toBeVisible();
   await expect(organise.getByRole("button", { name: "Remove tag cw" })).toBeVisible();
+  await expect(organise).toHaveAttribute("aria-busy", "false"); // saves finished
   await expect(page.getByRole("status")).toHaveText("All changes saved"); // not an edit
 
   // Reload: both persisted.

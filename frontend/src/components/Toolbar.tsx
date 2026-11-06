@@ -138,8 +138,14 @@ export function Toolbar({ editor }: { editor: Editor }) {
       {toggle("Italic", "Mod+I", state.italic, () => chain().toggleItalic().run(), <i>I</i>)}
       {toggle("Underline", "Mod+U", state.underline, () => chain().toggleUnderline().run(), <u>U</u>)}
       <span className="sep" aria-hidden="true" />
-      {toggle("Bulleted list", "Mod+Shift+8", state.bulletList, () => chain().toggleBulletList().run(), "• List")}
-      {toggle("Numbered list", "Mod+Shift+7", state.orderedList, () => chain().toggleOrderedList().run(), "1. List")}
+      {/* The "•" / "1." markers are drawn by CSS with empty alt text, so the visible text and
+          the accessible name both contain "List" (WCAG 2.5.3, label in name). */}
+      {toggle("Bulleted list", "Mod+Shift+8", state.bulletList, () => chain().toggleBulletList().run(), (
+        <span className="list-face list-face-bullet">List</span>
+      ))}
+      {toggle("Numbered list", "Mod+Shift+7", state.orderedList, () => chain().toggleOrderedList().run(), (
+        <span className="list-face list-face-number">List</span>
+      ))}
     </div>
   );
 }
