@@ -5,8 +5,8 @@
 | Service | Type | URL | Notes |
 | --- | --- | --- | --- |
 | `docworkspace-web` | Static site | https://docworkspace-web.onrender.com | Rewrites `/api/*` → API; CSP + security headers |
-| `docworkspace-api` | Python web service (free) | https://docworkspace-api.onrender.com | Sleeps when idle; first request ~30–50 s |
-| `docworkspace-db` | PostgreSQL 16 (free) | internal | **Expires ~2026-11-28** (30 days) |
+| `docworkspace-api` | Python web service (Starter) | https://docworkspace-api.onrender.com | Always on; migrations run as a pre-deploy step |
+| `docworkspace-db` | PostgreSQL 16 (`basic-256mb`) | internal | Paid plan: backups, no expiry |
 | R2 bucket | Cloudflare R2 | `document-workspace-attachments` | Private; credentials only in Render env |
 
 All three Render resources are managed by the Blueprint (`render.yaml`, branch `main`).
@@ -15,11 +15,21 @@ All three Render resources are managed by the Blueprint (`render.yaml`, branch `
 
 1. Merge a PR to `main` → Render auto-deploys the API and static site; the Blueprint syncs
    `render.yaml` changes (new services/env keys). Check **Blueprints → Syncs** after changing it.
-2. API start command: `alembic upgrade head` → `python scripts/seed_demo.py` (idempotent, every
-   start — user decision) → uvicorn on `$PORT` behind Render's proxy.
-3. Verify (≈1 min): `scripts/smoke_deployed.sh "" "" <commit>` from a clone. It warms the API,
-   asserts the **served commit**, database and storage readiness, then exercises login, import,
-   append, 409, attachment round-trip, share/revoke, 415, and deletes its test data.
+2. API deploy: build → **pre-deploy** `python scripts/migrate.py` (`alembic upgrade head`, once,
+   before the new instance starts) → uvicorn on `$PORT` behind Render's proxy → `/health/ready` must pass before traffic
+   moves over. A failed migration or health check fails the deploy and the previous version keeps
+   serving. No demo seed in production (ADR-009).
+3. Verify, automatically: the **Post-deploy smoke** GitHub Action (`.github/workflows/deploy-smoke.yml`)
+   runs on every push to `main`. It waits (up to 25 min) until `/health/live` reports the pushed
+   commit, then runs `scripts/smoke_deployed.sh` anonymously: served commit, database and storage
+   readiness, static site and deep links, security headers, 401s for signed-out calls, cross-site
+   writes blocked, demo sign-in off, OAuth offered. It also runs daily at 13:17 UTC and can be run by
+   hand (Actions → Post-deploy smoke → Run workflow). A failure emails whoever pushed.
+4. At release, also run the signed-in journey by hand (below: Smoke test against production).
+
+Render deploys on every commit rather than waiting for CI (`autoDeployTrigger: checksPass`):
+the post-deploy smoke run is itself a check on the merged commit, so Render would wait for a run
+that is waiting for Render. Branch protection keeps failing code out of `main` instead.
 
 ## Health and logs
 
@@ -37,20 +47,38 @@ All three Render resources are managed by the Blueprint (`render.yaml`, branch `
 | Deploy shows **Live** but routes/`commit` are old | Stale build (#30) | API → Manual Deploy → **Clear build cache & deploy**; rerun smoke test |
 | `/health/ready` `storage: error` | R2 credentials/endpoint wrong or R2 outage | Check `STORAGE_*` on **docworkspace-api** → Environment; attachments return 503 until fixed |
 | Static site 404 with `x-render-routing: no-server` | Site not created / routing still propagating | Blueprint → Manual sync; wait a few minutes after creation |
-| Login page shows no users | `/api` rewrite not reaching API, or API asleep | Open the API URL to wake it; check static site **Redirects/Rewrites** (`/api/*` → API `/api/*`) |
+| Sign-in page shows no GitHub/Google buttons, or errors | `/api` rewrite not reaching the API, or API down | Check `/health/live` on the API URL; check static site **Redirects/Rewrites** (`/api/*` → API `/api/*`) |
 | `429 Too many requests` | Rate limit (20 logins/min/IP, 30 uploads/min/user) | Wait for `Retry-After`; tune `LOGIN_RATE_LIMIT_PER_MINUTE` / `UPLOAD_RATE_LIMIT_PER_MINUTE` |
 | `409` on save | Document changed elsewhere | Expected: UI offers "Reload latest version" |
-| DB unavailable after ~30 days | Free Postgres expired | Upgrade the DB plan before ~2026-11-28 |
+| Deploy **failed** in the pre-deploy step | Migration error | Previous version is still serving. Read the deploy log, fix forward in a PR; see Rollback and migrations |
+| Post-deploy smoke: "did not serve <commit> within 25 minutes" | Deploy failed, is stuck, or served stale code (#30) | Check API → Events; for a stale build, **Clear build cache & deploy** |
 
-## Rollback
+## Rollback and migrations
 
-- **Code:** Render → docworkspace-api (or -web) → Events → pick the last good deploy → **Rollback**.
-  Or revert the PR on GitHub and let auto-deploy run.
-- **Schema:** migrations are additive so far (single `0001`); rolling back code does not require
-  a downgrade. For future migrations, run `alembic downgrade -1` from the Render Shell only if the
-  previous code cannot read the new schema.
-- **Data:** free Postgres has no point-in-time recovery; paid plans include backups. Attachment
-  objects are only deleted when their document/attachment is deleted.
+**Rule for migrations: the previous release must run against the new schema.** Add columns as
+nullable (or with a server default), add tables and indexes freely; never rename or drop in the
+same release that stops using something. Remove it one release later. Every migration so far
+(0001–0006) follows this, so rolling back code never needs a schema downgrade. Each migration
+also has a working `downgrade()`; CI checks `downgrade -1`, `downgrade base` and `upgrade head`
+against seeded data on every PR.
+
+- **Roll back code** (first choice): Render → docworkspace-api (or -web) → Events → the last good
+  deploy → **Rollback**, or revert the PR on GitHub and let auto-deploy run (do this as well after
+  a Rollback, or the next push brings the bad commit back). Either way the older code meets a
+  database migrated past what it knows. `scripts/migrate.py` sees that, logs "database is at …,
+  newer than this code's migrations", and leaves the schema alone instead of failing the deploy;
+  the rule above makes the older code safe on it. (A plain `alembic upgrade head` would fail
+  with "Can't locate revision".)
+- **A migration failed during deploy:** nothing to roll back. The pre-deploy step runs in a
+  transaction (PostgreSQL DDL is transactional), the deploy is marked failed, and the previous
+  version keeps serving. Fix forward.
+- **Schema downgrade** (rare: only if a migration itself is wrong): Render → docworkspace-api →
+  Shell, *while the newer code is still deployed* (it has the migration's `downgrade()`):
+  `alembic current`, then `alembic downgrade -1`, then roll back the code. A downgrade that drops a column or table **destroys the data in it**: take
+  a backup first (database → Recovery / Backups) and say so in the incident notes.
+- **Data:** the paid database has daily backups and point-in-time recovery (Recovery tab).
+  Practise a restore into a scratch database before relying on it (PRODUCTION_READINESS →
+  restore drill). Attachment objects in R2 are only deleted when a document is deleted for good.
 
 ## OAuth sign-in (ADR-009)
 
@@ -112,8 +140,8 @@ delete from R2 are listed (exit code 1) for manual removal. Re-running it is har
 
 Deleting a document moves it to its owner's Trash. Nobody else can see it there, and the owner
 can restore it with its shares, attachments, folder and tags. After 30 days the API removes it
-and its attachment objects for good: the free plan has no cron, so this runs at most once an hour
-per instance, after someone loads My Documents or their Trash. To check or run it by hand:
+and its attachment objects for good. This runs inside the API (no separate cron job to pay for
+or monitor), at most once an hour per instance, after someone loads My Documents or their Trash. To check or run it by hand:
 
 ```bash
 # Render → docworkspace-api → Shell
@@ -142,8 +170,9 @@ Set on **docworkspace-api** only (never on the static site — its env is baked 
 `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`. `STORAGE_REGION=auto` comes from `render.yaml`.
 Rotating `SESSION_SECRET` signs everyone out (harmless for the demo).
 
-## Costs (free tier, as deployed)
+## Costs (as deployed for v1.0)
 
-$0: free web service (sleeps when idle), free static site, free Postgres (expires after 30 days),
-R2 free tier. Upgrade path: Starter web service (no sleep), Basic Postgres (backups, no expiry).
-Check Render's pricing page for current amounts.
+Paid: Starter web service for the API, `basic-256mb` Postgres (backups, no expiry). Free: the
+static site, R2 within its free tier, and GitHub Actions minutes for the smoke runs (a few
+minutes per deploy plus one daily run). Check Render's and Cloudflare's pricing pages for current
+amounts. Both plans are pinned in `render.yaml`, so a Blueprint sync never downgrades them.

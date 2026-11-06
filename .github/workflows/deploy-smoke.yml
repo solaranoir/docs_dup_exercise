@@ -1,0 +1,56 @@
+# Post-deploy smoke checks (Phase 6 decision): public, anonymous checks only, no secrets.
+# The signed-in journey stays a manual release step (RUNBOOK → Smoke test against production).
+#
+# Render auto-deploys every push to main. This waits until the API reports that commit on
+# /health/live (catches deploys that go "live" with stale code, #30), then runs
+# scripts/smoke_deployed.sh. A daily run catches database or storage problems between deploys.
+# A failed run emails whoever pushed (or, for the schedule, whoever last changed this file).
+name: Post-deploy smoke
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 13 * * *" # daily, 13:17 UTC
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit the API should be serving (blank = don't check)
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push supersedes an older one still waiting for its deploy.
+  group: deploy-smoke-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      WEB_URL: ${{ vars.SMOKE_WEB_URL || 'https://docworkspace-web.onrender.com' }}
+      API_URL: ${{ vars.SMOKE_API_URL || 'https://docworkspace-api.onrender.com' }}
+      EXPECTED_COMMIT: ${{ github.event_name == 'push' && github.sha || inputs.commit || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Render to serve this commit
+        if: env.EXPECTED_COMMIT != ''
+        run: |
+          deadline=$((SECONDS + 25 * 60))
+          while (( SECONDS < deadline )); do
+            served="$(curl -s -m 30 "$API_URL/health/live" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("commit") or "")' 2>/dev/null || true)"
+            if [[ -n "$served" && "$EXPECTED_COMMIT" == "$served"* ]]; then
+              echo "API is serving $served"; exit 0
+            fi
+            echo "Serving '${served:-unknown}', waiting for $EXPECTED_COMMIT…"
+            sleep 30
+          done
+          echo "::error::The API did not serve $EXPECTED_COMMIT within 25 minutes. Check the deploy in Render (a failed migration fails the deploy; a stale build needs 'Clear build cache & deploy', RUNBOOK)."
+          exit 1
+
+      - name: Smoke checks (anonymous)
+        run: scripts/smoke_deployed.sh "$WEB_URL" "$API_URL" "$EXPECTED_COMMIT"
