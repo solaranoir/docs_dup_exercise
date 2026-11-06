@@ -23,6 +23,7 @@ from app.routes import (
     oauth,
     organize,
     templates,
+    trash,
 )
 
 access_log = logging.getLogger("app.access")
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(organize.router)
     app.include_router(templates.router)
     app.include_router(export.router)
+    app.include_router(trash.router)
     return app
 
 

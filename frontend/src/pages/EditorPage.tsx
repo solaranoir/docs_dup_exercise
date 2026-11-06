@@ -11,6 +11,7 @@ import { ShareDialog } from "../components/ShareDialog";
 import { displayShortcut, Toolbar, TOOLBAR_SHORTCUT } from "../components/Toolbar";
 import { normalizeContent } from "../content";
 import { extensions } from "../editorExtensions";
+import { setFlash } from "../flash";
 import { Link } from "../components/Link";
 import { navigate, navigationGuard, paths } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
@@ -153,6 +154,18 @@ function DocumentEditor({
       onReplace(await (value ? api.archiveDocument(initial.id) : api.restoreDocument(initial.id)));
     });
   const saveFirst = dirty ? "Save your changes first" : undefined;
+  const moveToTrash = () => {
+    const name = title.trim() || "Untitled document";
+    const shared = "Anyone you shared it with loses access until you restore it.";
+    if (!window.confirm(`Move "${name}" to the Trash? You can restore it for 30 days. ${shared}`)) {
+      return;
+    }
+    void run(async () => {
+      await api.deleteDocument(initial.id);
+      setFlash({ message: `Moved "${name}" to the Trash.`, trashedId: initial.id });
+      navigate(paths.list);
+    });
+  };
 
   const reloadLatest = async () => {
     if (!window.confirm("Discard your unsaved edits and load the latest version?")) return;
@@ -184,6 +197,11 @@ function DocumentEditor({
         {isOwner && !archived && (
           <button type="button" onClick={() => void setArchived(true)} disabled={busy || dirty} title={saveFirst}>
             Archive
+          </button>
+        )}
+        {isOwner && (
+          <button type="button" onClick={moveToTrash} disabled={busy || dirty} title={saveFirst}>
+            Delete
           </button>
         )}
         {!readOnly && (
@@ -225,7 +243,7 @@ function DocumentEditor({
             Archived {new Date(initial.archived_at!).toLocaleDateString()}. It's hidden from document
             lists and can't be edited{isOwner ? " until you restore it" : ""}.
           </span>
-          {isOwner && (
+        {isOwner && (
             <button type="button" onClick={() => void setArchived(false)} disabled={busy}>
               Restore
             </button>

@@ -20,6 +20,7 @@ from app.main import create_app
 from app.ratelimit import reset_limits
 from app.seed import seed_demo_users
 from app.storage import MemoryStorage, get_storage, optional_storage
+from app.trash import purge_expired, reset_schedule, trash_purger
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -72,8 +73,10 @@ def db(engine) -> Iterator[Session]:  # type: ignore[no-untyped-def]
 @pytest.fixture(autouse=True)
 def _fresh_rate_limits() -> Iterator[None]:
     reset_limits()
+    reset_schedule()
     yield
     reset_limits()
+    reset_schedule()
 
 
 @pytest.fixture
@@ -87,6 +90,8 @@ def client(db: Session, storage: MemoryStorage) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_storage] = lambda: storage
     app.dependency_overrides[optional_storage] = lambda: storage
+    # The opportunistic Trash purge must use the test database, never DATABASE_URL.
+    app.dependency_overrides[trash_purger] = lambda: lambda: purge_expired(db, storage)
     with TestClient(app) as c:
         yield c
 

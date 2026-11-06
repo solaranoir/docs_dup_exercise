@@ -108,6 +108,23 @@ them. Real (OAuth) accounts are untouched. It refuses to run if a demo user has 
 identity, or if attachment objects exist while storage is unconfigured. Objects it cannot
 delete from R2 are listed (exit code 1) for manual removal. Re-running it is harmless.
 
+## Trash and permanent deletion (ADR-012)
+
+Deleting a document moves it to its owner's Trash. Nobody else can see it there, and the owner
+can restore it with its shares, attachments, folder and tags. After 30 days the API removes it
+and its attachment objects for good: the free plan has no cron, so this runs at most once an hour
+per instance, after someone loads My Documents or their Trash. To check or run it by hand:
+
+```bash
+# Render → docworkspace-api → Shell
+python scripts/purge_trash.py          # dry run: how many documents are in Trash and due
+python scripts/purge_trash.py --yes    # remove everything past 30 days now
+```
+
+A document can't be recovered after it's removed (or after its owner chooses *Delete forever*),
+except from a database backup. If the script reports attachment objects it could not delete,
+they are orphans in R2 and safe to remove there.
+
 ## Smoke test against production
 
 ```bash

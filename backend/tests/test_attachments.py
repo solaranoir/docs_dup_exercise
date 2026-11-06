@@ -88,7 +88,7 @@ def test_attachment_authorization(client: TestClient, login) -> None:  # type: i
     )
 
 
-def test_deleting_document_removes_objects(
+def test_deleting_forever_removes_objects(
     client: TestClient, login, storage: MemoryStorage
 ) -> None:  # type: ignore[no-untyped-def]
     alice = login("alice")
@@ -97,6 +97,8 @@ def test_deleting_document_removes_objects(
     _attach(client, alice, doc_id, "b.txt", b"2")
     assert len(storage.objects) == 2
     assert client.delete(f"/api/documents/{doc_id}", headers=alice).status_code == 204
+    assert len(storage.objects) == 2  # in the Trash: kept for a restore
+    assert client.delete(f"/api/trash/{doc_id}", headers=alice).status_code == 204
     assert storage.objects == {}
 
 

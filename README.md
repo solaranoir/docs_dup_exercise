@@ -23,6 +23,8 @@ _README updated 2026-11-04._ The previous MVP README is archived in
   Cloudflare R2 and downloaded through the API.
 - **Export** any document as Markdown (a `.zip` with its attachments when it has any), print or
   save it as PDF, or download everything you own at once with **Export all**.
+- **Delete** to the Trash: restore within 30 days (sharing and attachments included), or
+  delete forever.
 - **Share** a document read-only with another member by email. There is no user directory: the
   person must have signed in once. The owner can revoke access at any time.
 

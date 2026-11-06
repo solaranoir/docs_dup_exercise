@@ -112,6 +112,9 @@ class Document(Base):
     )
     # Set by the owner to retire a document (DOC-021): hidden from lists, read-only until restored.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Set when the owner deletes it (DOC-031, ADR-012): in the Trash, invisible to everyone except
+    # the owner's Trash view, and permanently removed TRASH_DAYS later.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     # Plain text of content_json for search (DOC-017). Derived, never set directly: the listeners
     # below cover ORM writes and apply_update() covers its bulk UPDATE. On PostgreSQL the
     # migration also adds a generated ``search_vector`` tsvector (title + this) with a GIN index;

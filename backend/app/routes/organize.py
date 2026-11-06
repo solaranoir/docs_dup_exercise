@@ -24,6 +24,7 @@ from app.organization import (
     set_tags,
 )
 from app.routes.documents import DB, load_document
+from app.trash import LIVE
 
 router = APIRouter(tags=["organize"])
 
@@ -95,6 +96,7 @@ def _folder_out(db: Session, user: User, folder: Folder) -> FolderOut:
         .where(
             DocumentFolder.folder_id == folder.id,
             Document.archived_at.is_(None),
+            LIVE,
             _readable(user),
         )
     )
@@ -153,7 +155,9 @@ def list_tags(user: CurrentUser, db: DB) -> TagSummary:
     rows = db.execute(
         select(DocumentTag.tag, func.count())
         .join(Document, Document.id == DocumentTag.document_id)
-        .where(DocumentTag.user_id == user.id, Document.archived_at.is_(None), _readable(user))
+        .where(
+            DocumentTag.user_id == user.id, Document.archived_at.is_(None), LIVE, _readable(user)
+        )
         .group_by(DocumentTag.tag)
         .order_by(DocumentTag.tag)
     ).all()
