@@ -50,6 +50,15 @@ def upload_limiter() -> SlidingWindowLimiter:
     return SlidingWindowLimiter(get_settings().upload_rate_limit_per_minute, 60)
 
 
+# Exports read every attachment from storage; a few per minute is plenty for a person.
+EXPORTS_PER_MINUTE = 10
+
+
+@lru_cache
+def export_limiter() -> SlidingWindowLimiter:
+    return SlidingWindowLimiter(EXPORTS_PER_MINUTE, 60)
+
+
 def _too_many(retry_after: float) -> HTTPException:
     return HTTPException(
         status.HTTP_429_TOO_MANY_REQUESTS,
@@ -70,6 +79,12 @@ def limit_uploads(user: CurrentUser) -> None:
         raise _too_many(wait)
 
 
+def limit_exports(user: CurrentUser) -> None:
+    if (wait := export_limiter().hit(f"user:{user.id}")) is not None:
+        raise _too_many(wait)
+
+
 def reset_limits() -> None:
     login_limiter().reset()
     upload_limiter().reset()
+    export_limiter().reset()

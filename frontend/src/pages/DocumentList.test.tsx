@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type DocumentSummary, type SearchResult } from "../api";
+import * as download from "../download";
 import { applyFilters, DocumentList, Highlight, recentlyOpened, sortDocuments } from "./DocumentList";
 
 const doc = (over: Partial<DocumentSummary>): DocumentSummary => ({
@@ -371,5 +372,27 @@ describe("Search with folder and tag filters", () => {
     render(<DocumentList />);
     await user.type(await screen.findByLabelText("Search documents"), "plan");
     await waitFor(() => expect(searchDocs).toHaveBeenCalledWith("plan", { folder: "7", tag: "pota" }));
+  });
+});
+
+describe("Export all", () => {
+  it("downloads the archive and warns when attachments were left out", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/");
+    vi.spyOn(api, "listDocuments").mockResolvedValue([doc({})]);
+    const blob = new Blob(["PK"]);
+    vi.spyOn(api, "exportAll").mockResolvedValue({ blob, filename: "all.zip", headers: new Headers(), missing: 2 });
+    const save = vi.spyOn(download, "saveFile").mockImplementation(() => {});
+    render(<DocumentList />);
+    await user.click(await screen.findByRole("button", { name: "Export all" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(blob, "all.zip"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("2 attachments couldn't be included");
+  });
+
+  it("is hidden for someone who owns nothing", async () => {
+    vi.spyOn(api, "listDocuments").mockResolvedValue([doc({ permission: "viewer" })]);
+    render(<DocumentList />);
+    await screen.findByRole("heading", { name: "Shared with me" });
+    expect(screen.queryByRole("button", { name: "Export all" })).toBeNull();
   });
 });

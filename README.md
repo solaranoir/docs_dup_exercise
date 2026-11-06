@@ -21,6 +21,8 @@ _README updated 2026-11-04._ The previous MVP README is archived in
   A preview lists anything the import cannot keep (tables, images, colours…) before saving.
 - **Attach** files to a document (10 MB each, up to 10 per document), stored privately in
   Cloudflare R2 and downloaded through the API.
+- **Export** any document as Markdown (a `.zip` with its attachments when it has any), print or
+  save it as PDF, or download everything you own at once with **Export all**.
 - **Share** a document read-only with another member by email. There is no user directory: the
   person must have signed in once. The owner can revoke access at any time.
 

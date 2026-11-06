@@ -124,6 +124,39 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** ``filename*=UTF-8''…`` (preferred) or ``filename="…"`` from a Content-Disposition header. */
+export function dispositionFilename(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1] ?? "");
+    } catch {
+      /* fall through to the ASCII name */
+    }
+  }
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? fallback;
+}
+
+/** A file download through fetch, so errors (403, 429, 503…) surface as messages rather than
+ * being saved as a file. */
+async function download(
+  path: string,
+  fallback: string,
+): Promise<{ blob: Blob; filename: string; headers: Headers }> {
+  const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+  if (!res.ok) {
+    const data: unknown = await res.json().catch(() => null);
+    const detail = (data as { detail?: unknown } | null)?.detail;
+    throw new ApiError(res.status, typeof detail === "string" ? detail : res.statusText);
+  }
+  return {
+    blob: await res.blob(),
+    filename: dispositionFilename(res.headers.get("Content-Disposition"), fallback),
+    headers: res.headers,
+  };
+}
+
 export const api = {
   me: () => request<User>("GET", "/api/me"),
   authMethods: () => request<AuthMethods>("GET", "/api/auth/methods"),
@@ -155,6 +188,15 @@ export const api = {
   createDocument: (options: { title?: string; template?: string } = {}) =>
     request<DocumentFull>("POST", "/api/documents", options),
   listTemplates: () => request<TemplateSummary[]>("GET", "/api/templates"),
+  /** Markdown: a .md, or a .zip with the document's attachments (DOC-028, DOC-030). */
+  exportDocument: (id: string) => download(`/api/documents/${id}/export`, "document.md"),
+  /** Every document the user owns, archived included, as one .zip (DOC-033). */
+  exportAll: async () => {
+    const file = await download("/api/export", "solara-docs-export.zip");
+    // Attachments storage couldn't provide; listed in the archive's index.md.
+    const missing = Number(file.headers.get("X-Export-Missing-Attachments") ?? 0) || 0;
+    return { ...file, missing };
+  },
   getDocument: (id: string) => request<DocumentFull>("GET", `/api/documents/${id}`),
   updateDocument: (
     id: string,
