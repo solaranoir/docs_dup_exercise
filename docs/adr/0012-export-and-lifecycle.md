@@ -1,7 +1,7 @@
 # ADR-012: Export and document lifecycle
 
-- **Status:** Accepted (2026-11-05). Implements DOC-028 to DOC-033 (Phase 5). Export ships in
-  PR 13; trash and recovery in PR 14.
+- **Status:** Accepted (2026-11-05). Implements DOC-028 to DOC-033 (Phase 5). Export shipped in
+  PR 13 (#52); trash and recovery in PR 14.
 - **Context:** The roadmap asks that "exports preserve supported structure, attachments are
   retrievable, and users can take their work elsewhere", and for a deletion and recovery
   policy. The API runs on Render's free web plan (no cron jobs, 512 MB). Documents are Tiptap
@@ -28,13 +28,22 @@
        blocks someone from taking the rest of their work.
      - Archives are spooled to a temporary file and streamed; exports are limited to 10 per
        minute per user.
-  4. **Trash with 30-day recovery** (DOC-031, PR 14). Owners can delete; the document moves to
-     Trash and disappears for everyone it was shared with, keeping its grants for a restore.
-     It can be restored for 30 days, after which it and its attachments are permanently
-     removed. "Delete forever" in Trash skips the wait. With no cron on the free plan, expired
-     items are purged opportunistically by the API, and the runbook gains a manual command.
+  4. **Trash with 30-day recovery** (DOC-031). Deleting sets `documents.deleted_at`; nothing
+     else changes.
+     - Only the owner can delete. The document then looks missing (404) on every document
+       route, for everyone including the owner, and drops out of lists, search, folder and tag
+       counts and *Export all*.
+     - Grants, attachments, folders and tags are kept, so *Restore* brings it back exactly as it
+       was, including its archive state. Deleting and restoring do not change `updated_at`.
+     - The owner's Trash (`/api/trash`) lists it with the date it will be removed. *Delete
+       forever* removes it and its attachment objects at once.
+     - After 30 days it is purged for good. The free plan has no cron, so the API purges at
+       most once an hour per instance, in a background task after a document or Trash listing;
+       `scripts/purge_trash.py` does it on demand.
+     - After deleting from the editor, My Documents offers *Undo*.
   5. **Revision history is deferred** past v1.0 (DOC-032) and will be designed with autosave
      (#27).
-- **Consequences:** Export needs no migration. Server-side PDF, Word export, exporting shared
-  documents in *Export all*, YAML front matter and revision history can be added later. Trash
-  (PR 14) adds a `deleted_at` column.
+- **Consequences:** Export needs no migration; Trash adds `documents.deleted_at` (migration
+  0006, with a partial index). A purged document can only come back from a database backup.
+  Server-side PDF, Word export, exporting shared documents in *Export all*, YAML front matter,
+  a configurable retention period and revision history can be added later.

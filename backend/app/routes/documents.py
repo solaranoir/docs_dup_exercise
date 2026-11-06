@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import exists, false, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -15,7 +15,6 @@ from app.content import ContentError, plain_text, validate_content
 from app.db import get_db
 from app.models import (
     EMPTY_DOC,
-    Attachment,
     Document,
     DocumentFolder,
     DocumentGrant,
@@ -27,8 +26,8 @@ from app.models import (
 from app.organization import normalize_tag, organization_for, set_folder, set_tags
 from app.policy import Permission, can_delete, can_edit, can_read, permission_for
 from app.search import MAX_QUERY_LENGTH, match_and_rank, query_terms, snippet
-from app.storage import Storage, StorageError, optional_storage
 from app.templates import BY_ID as TEMPLATE_IDS
+from app.trash import LIVE, TrashPurger, schedule_purge
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 log = logging.getLogger(__name__)
@@ -160,7 +159,8 @@ def load_document(db: Session, user: User, doc_id: uuid.UUID) -> tuple[Document,
     doc = db.get(Document, doc_id)
     permission = permission_for(db, user, doc) if doc else None
     # Privacy-preserving: documents the caller cannot read look exactly like missing ones.
-    if doc is None or not can_read(permission):
+    # Documents in the Trash look missing too, even to their owner (only /api/trash shows them).
+    if doc is None or doc.deleted_at is not None or not can_read(permission):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
     assert permission is not None
     return doc, permission
@@ -182,8 +182,18 @@ def _record_visit(db: Session, user: User, doc: Document) -> datetime:
 
 
 @router.get("")
-def list_documents(user: CurrentUser, db: DB, archived: bool = False) -> list[DocumentSummary]:
-    """The caller's own and shared documents; archived ones only with ``?archived=true``."""
+def list_documents(
+    user: CurrentUser,
+    db: DB,
+    background: BackgroundTasks,
+    purger: TrashPurger,
+    archived: bool = False,
+) -> list[DocumentSummary]:
+    """The caller's own and shared documents; archived ones only with ``?archived=true``.
+
+    Documents in the Trash are never listed. Also the hook for the hourly Trash purge.
+    """
+    schedule_purge(background, purger)
     visit = DocumentVisit.last_opened_at
     visit_join = (DocumentVisit.document_id == Document.id) & (DocumentVisit.user_id == user.id)
     state = Document.archived_at.is_not(None) if archived else Document.archived_at.is_(None)
@@ -191,14 +201,14 @@ def list_documents(user: CurrentUser, db: DB, archived: bool = False) -> list[Do
         select(Document, User, visit)
         .join(User, User.id == Document.owner_id)
         .outerjoin(DocumentVisit, visit_join)
-        .where(Document.owner_id == user.id, state)
+        .where(Document.owner_id == user.id, state, LIVE)
     ).all()
     shared = db.execute(
         select(Document, User, DocumentGrant.role, visit)
         .join(DocumentGrant, DocumentGrant.document_id == Document.id)
         .join(User, User.id == Document.owner_id)
         .outerjoin(DocumentVisit, visit_join)
-        .where(DocumentGrant.grantee_id == user.id, state)
+        .where(DocumentGrant.grantee_id == user.id, state, LIVE)
     ).all()
     items = [_summary(d, o, "owner", v) for d, o, v in owned]
     items += [_summary(d, o, "editor" if r == "editor" else "viewer", v) for d, o, r, v in shared]
@@ -270,6 +280,7 @@ def search_documents(
         .where(
             or_(Document.owner_id == user.id, DocumentGrant.id.is_not(None)),
             Document.archived_at.is_(None),
+            LIVE,
             match,
             *filters,
         )
@@ -421,22 +432,18 @@ def apply_update(
 
 
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_document(
-    doc_id: uuid.UUID,
-    user: CurrentUser,
-    db: DB,
-    storage: Annotated[Storage | None, Depends(optional_storage)],
-) -> None:
+def delete_document(doc_id: uuid.UUID, user: CurrentUser, db: DB) -> None:
+    """Move the document to the Trash (DOC-031, ADR-012), restorable for TRASH_DAYS.
+
+    Grants, attachments, folders and tags are kept for a restore; the document disappears for
+    everyone straight away. ``updated_at`` is unchanged: deleting is not an edit.
+    """
     doc, permission = load_document(db, user, doc_id)
     if not can_delete(permission):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the owner can delete a document")
-    keys = list(db.scalars(select(Attachment.object_key).where(Attachment.document_id == doc.id)))
-    db.delete(doc)
+    db.execute(
+        update(Document)
+        .where(Document.id == doc.id)
+        .values(deleted_at=utcnow(), updated_at=Document.updated_at)
+    )
     db.commit()
-    for key in keys:
-        if storage is None:
-            break
-        try:
-            storage.delete(key)
-        except StorageError:
-            log.warning("orphaned attachment object after document delete: %s", key)

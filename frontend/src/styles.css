@@ -435,3 +435,12 @@ kbd {
   .editor-body p, .editor-body li { orphans: 3; widows: 3; }
   .editor-body li { break-inside: avoid; }
 }
+
+/* Trash (ADR-012) */
+.trash { margin-top: 12px; }
+.trash-list li { flex-wrap: wrap; }
+.trash-title { font-weight: 600; flex: 1 1 auto; }
+.trash-actions { display: flex; gap: 8px; }
+.trash-actions button { padding: 4px 10px; font-size: 0.85rem; }
+.notice-flash { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; margin: 12px 0; background: rgb(163 182 141 / 0.12); border-color: var(--control-border); }
+.notice-flash button { padding: 4px 12px; }

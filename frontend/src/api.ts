@@ -45,6 +45,18 @@ export interface TemplateSummary {
   sections: { heading: string; fields: string[] }[];
 }
 
+/** A document in the owner's Trash (DOC-031, ADR-012). */
+export interface TrashItem {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  deleted_at: string;
+  /** When it will be removed for good. */
+  purge_after: string;
+}
+
 export interface Folder {
   id: number;
   name: string;
@@ -173,6 +185,11 @@ export const api = {
     if (filters.tag) params.set("tag", filters.tag);
     return request<SearchResult[]>("GET", `/api/documents/search?${params}`);
   },
+  /** Moves the document to the Trash; restorable for 30 days. Owner only. */
+  deleteDocument: (id: string) => request<void>("DELETE", `/api/documents/${id}`),
+  listTrash: () => request<{ retention_days: number; items: TrashItem[] }>("GET", "/api/trash"),
+  restoreFromTrash: (id: string) => request<TrashItem>("POST", `/api/trash/${id}/restore`),
+  deleteForever: (id: string) => request<void>("DELETE", `/api/trash/${id}`),
   archiveDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/archive`),
   restoreDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/restore`),
   duplicateDocument: (id: string) => request<DocumentFull>("POST", `/api/documents/${id}/duplicate`),

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type DocumentSummary, type SearchResult } from "../api";
 import * as download from "../download";
+import { setFlash } from "../flash";
 import { applyFilters, DocumentList, Highlight, recentlyOpened, sortDocuments } from "./DocumentList";
 
 const doc = (over: Partial<DocumentSummary>): DocumentSummary => ({
@@ -394,5 +395,66 @@ describe("Export all", () => {
     render(<DocumentList />);
     await screen.findByRole("heading", { name: "Shared with me" });
     expect(screen.queryByRole("button", { name: "Export all" })).toBeNull();
+  });
+});
+
+describe("Trash", () => {
+  const item = {
+    id: "t1",
+    title: "Old plan",
+    created_at: "2026-10-01T12:00:00Z",
+    updated_at: "2026-10-02T12:00:00Z",
+    archived_at: null,
+    deleted_at: "2026-11-05T12:00:00Z",
+    purge_after: "2026-12-05T12:00:00Z",
+  };
+
+  it("lists deleted documents and restores or deletes them forever", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/");
+    const list = vi.spyOn(api, "listDocuments").mockResolvedValue([doc({})]);
+    vi.spyOn(api, "listTrash")
+      .mockResolvedValueOnce({ retention_days: 30, items: [item, { ...item, id: "t2", title: "Older" }] })
+      .mockResolvedValue({ retention_days: 30, items: [] });
+    const restore = vi.spyOn(api, "restoreFromTrash").mockResolvedValue(item);
+    render(<DocumentList />);
+    await user.click(await screen.findByRole("button", { name: "Show Trash" }));
+    const trash = await screen.findByRole("region", { name: "Trash" });
+    expect(within(trash).getByText(/stay here for 30 days/)).toBeInTheDocument();
+    expect(within(trash).getAllByText(/^Deleted .* · removed after /)).toHaveLength(2);
+    list.mockClear();
+    await user.click(within(trash).getByRole("button", { name: "Restore Old plan" }));
+    expect(restore).toHaveBeenCalledWith("t1");
+    expect(await within(trash).findByText("The Trash is empty.")).toBeInTheDocument();
+    expect(list).toHaveBeenCalled(); // the restored document reappears in the lists
+  });
+
+  it("asks before deleting forever", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "listDocuments").mockResolvedValue([doc({})]);
+    vi.spyOn(api, "listTrash").mockResolvedValue({ retention_days: 30, items: [item] });
+    const forever = vi.spyOn(api, "deleteForever").mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<DocumentList />);
+    await user.click(await screen.findByRole("button", { name: "Show Trash" }));
+    const button = await screen.findByRole("button", { name: "Delete Old plan forever" });
+    await user.click(button);
+    expect(forever).not.toHaveBeenCalled();
+    await user.click(button);
+    expect(confirm).toHaveBeenLastCalledWith(`Delete "Old plan" forever? This can't be undone.`);
+    expect(forever).toHaveBeenCalledWith("t1");
+  });
+
+  it("offers Undo after a document was moved to the Trash", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "listDocuments").mockResolvedValue([doc({})]);
+    const restore = vi.spyOn(api, "restoreFromTrash").mockResolvedValue(item);
+    setFlash({ message: `Moved "Old plan" to the Trash.`, trashedId: "t1" });
+    render(<DocumentList />);
+    expect(await screen.findByText(`Moved "Old plan" to the Trash.`)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(restore).toHaveBeenCalledWith("t1");
+    expect(await screen.findByText("Restored from the Trash.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 });

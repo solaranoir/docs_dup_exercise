@@ -24,6 +24,7 @@ from app.organization import organization_for
 from app.ratelimit import limit_exports
 from app.routes.documents import DB, load_document
 from app.storage import Storage, StorageError, optional_storage
+from app.trash import LIVE
 
 router = APIRouter(tags=["export"], dependencies=[Depends(limit_exports)])
 log = logging.getLogger(__name__)
@@ -202,7 +203,7 @@ def export_all(user: CurrentUser, db: DB, storage: OptionalStorage) -> Streaming
     docs = list(
         db.scalars(
             select(Document)
-            .where(Document.owner_id == user.id)
+            .where(Document.owner_id == user.id, LIVE)
             .order_by(Document.created_at, Document.id)
         )
     )

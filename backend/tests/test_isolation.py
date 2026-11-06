@@ -24,6 +24,7 @@ class Case:
     path: str  # FastAPI route template
     expected: tuple[int, int, int, int]  # owner, viewer, stranger, anonymous
     body: str = "none"  # none | json-title | json-share | json-folder | json-tags | upload | import
+    trashed: bool = False  # the owner moves the document to the Trash first (ADR-012)
 
 
 CASES = [
@@ -35,6 +36,9 @@ CASES = [
     # Any reader may copy into a document they own; the source is untouched.
     Case("POST", "/api/documents/{doc_id}/duplicate", (201, 201, 404, 401)),
     Case("GET", "/api/documents/{doc_id}/export", (200, 200, 404, 401)),
+    # Only the owner has the document in their Trash; a viewer's Trash is their own.
+    Case("POST", "/api/trash/{doc_id}/restore", (200, 404, 404, 401), trashed=True),
+    Case("DELETE", "/api/trash/{doc_id}", (204, 404, 404, 401), trashed=True),
     # Personal organisation (ADR-010): any reader files/tags in their own view only.
     Case("PUT", "/api/documents/{doc_id}/folder", (200, 200, 404, 401), "json-folder"),
     Case("PUT", "/api/documents/{doc_id}/tags", (200, 200, 404, 401), "json-tags"),
@@ -101,12 +105,17 @@ def _request(client: TestClient, case: Case, world: World, role: str) -> Any:
 @pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c.method} {c.path}")
 def test_route_access(client: TestClient, world: World, case: Case, role: str) -> None:
     expected = case.expected[ROLES.index(role)]
+    owner = world.headers["owner"]
+    if case.trashed:
+        assert client.delete(f"/api/documents/{world.doc_id}", headers=owner).status_code == 204
     response = _request(client, case, world, role)
     assert response.status_code == expected, response.text
 
     # Denied requests change nothing: the owner still sees the original state.
     if expected >= 400:
-        owner = world.headers["owner"]
+        if case.trashed:  # still intact in the owner's Trash
+            restored = client.post(f"/api/trash/{world.doc_id}/restore", headers=owner)
+            assert restored.status_code == 200
         doc = client.get(f"/api/documents/{world.doc_id}", headers=owner).json()
         assert (doc["title"], doc["revision"]) == ("Field notes", 1)
         attachments = client.get(f"/api/documents/{world.doc_id}/attachments", headers=owner)

@@ -7,10 +7,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, type DocumentSummary, type Folder, type SearchResult } from "../api";
+import { api, type DocumentSummary, type Folder, type SearchResult, type TrashItem } from "../api";
 import { FoldersDialog } from "../components/FoldersDialog";
 import { NewDocumentDialog } from "../components/NewDocumentDialog";
 import { saveFile } from "../download";
+import { clearFlash, peekFlash, type Flash } from "../flash";
 import { Link } from "../components/Link";
 import { navigate, paths, setSearchParams, useSearchParams } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
@@ -282,6 +283,117 @@ function SearchResults({
 }
 
 /** Archived documents load only on request, so the main list stays fast and uncluttered. */
+const formatDate = (iso: string) => new Date(iso).toLocaleDateString();
+
+/** The owner's Trash (DOC-031, ADR-012): restore, or delete forever before the 30 days end. */
+function TrashSection({ onChanged, version }: { onChanged: () => void; version: number }) {
+  const [items, setItems] = useState<TrashItem[] | null>(null);
+  const [days, setDays] = useState(30);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    () =>
+      api.listTrash().then(
+        (trash) => {
+          setItems(trash.items);
+          setDays(trash.retention_days);
+          setError(null);
+        },
+        (e: Error) => setError(e.message),
+      ),
+    [],
+  );
+  // Reload while open when something else changed (e.g. Undo on a deletion).
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load, version]);
+
+  const act = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const forever = (item: TrashItem) => {
+    if (!window.confirm(`Delete "${item.title}" forever? This can't be undone.`)) return;
+    void act(() => api.deleteForever(item.id));
+  };
+
+  return (
+    <div className="archived trash">
+      <button type="button" className="link-button" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? "Hide Trash" : "Show Trash"}
+      </button>
+      {open && error && <p role="alert">{error}</p>}
+      {open && !error && items === null && <p className="loading">Loading…</p>}
+      {open && items && (
+        <section aria-labelledby="h-trash">
+          <h2 id="h-trash">Trash</h2>
+          <p className="hint">
+            Deleted documents stay here for {days} days, then they and their attachments are removed
+            for good. Only you can see your Trash.
+          </p>
+          {items.length === 0 ? (
+            <p className="empty">The Trash is empty.</p>
+          ) : (
+            <ul className="doc-list trash-list">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <span className="trash-title">{item.title}</span>
+                  <time dateTime={item.deleted_at}>
+                    Deleted {formatDate(item.deleted_at)} · removed after {formatDate(item.purge_after)}
+                  </time>
+                  <span className="trash-actions">
+                    <button
+                      type="button"
+                      onClick={() => void act(() => api.restoreFromTrash(item.id))}
+                      aria-label={`Restore ${item.title}`}
+                    >
+                      Restore
+                    </button>
+                    <button type="button" onClick={() => forever(item)} aria-label={`Delete ${item.title} forever`}>
+                      Delete forever
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** "Moved … to the Trash. Undo" after deleting from the editor. */
+function FlashNotice({ flash, onUndo }: { flash: Flash; onUndo: () => Promise<void> }) {
+  const [message, setMessage] = useState(flash.message);
+  const [undoable, setUndoable] = useState(Boolean(flash.trashedId));
+  const undo = async () => {
+    setUndoable(false);
+    try {
+      await onUndo();
+      setMessage("Restored from the Trash.");
+    } catch (e) {
+      setMessage(`Couldn't restore: ${(e as Error).message}`);
+    }
+  };
+  return (
+    <div className="notice notice-flash" aria-live="polite">
+      <span>{message}</span>
+      {undoable && (
+        <button type="button" onClick={() => void undo()}>
+          Undo
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ArchivedSection({ onRestored }: { onRestored: () => void }) {
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [open, setOpen] = useState(false);
@@ -437,6 +549,9 @@ export function DocumentList() {
   const [sort, setSort] = useSortPreference();
 
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [flash] = useState(peekFlash);
+  useEffect(clearFlash, []);
+  const [trashVersion, setTrashVersion] = useState(0);
   const [foldersOpen, setFoldersOpen] = useState(false);
   const params = useSearchParams();
 
@@ -492,6 +607,16 @@ export function DocumentList() {
           </button>
         </div>
       </div>
+      {flash && (
+        <FlashNotice
+          flash={flash}
+          onUndo={async () => {
+            await api.restoreFromTrash(flash.trashedId!);
+            load();
+            setTrashVersion((v) => v + 1);
+          }}
+        />
+      )}
       <NewDocumentDialog
         open={newOpen}
         onClose={() => setNewOpen(false)}
@@ -628,6 +753,7 @@ export function DocumentList() {
             folderNames={folder === null ? folderNames : undefined}
           />
           <ArchivedSection onRestored={load} />
+          <TrashSection onChanged={load} version={trashVersion} />
         </>
       )}
       <FoldersDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} folders={folders} onChanged={load} />
