@@ -10,6 +10,7 @@ import {
 import { api, type DocumentSummary, type Folder, type SearchResult } from "../api";
 import { FoldersDialog } from "../components/FoldersDialog";
 import { NewDocumentDialog } from "../components/NewDocumentDialog";
+import { saveFile } from "../download";
 import { Link } from "../components/Link";
 import { navigate, paths, setSearchParams, useSearchParams } from "../router";
 import { useDocumentTitle } from "../useDocumentTitle";
@@ -337,6 +338,47 @@ function ArchivedSection({ onRestored }: { onRestored: () => void }) {
   );
 }
 
+/** Downloads every document the user owns as one .zip (DOC-033, ADR-012). */
+function ExportAllButton() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { blob, filename, missing } = await api.exportAll();
+      saveFile(blob, filename);
+      if (missing > 0) {
+        setError(
+          `Exported, but ${missing === 1 ? "1 attachment" : `${missing} attachments`} couldn't be ` +
+            "included. They're listed in index.md; try again later to include them.",
+        );
+      }
+    } catch (e) {
+      setError(`Export failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void run()}
+        disabled={busy}
+        title="Every document you own, with attachments, as Markdown in a .zip"
+      >
+        {busy ? "Preparing export…" : "Export all"}
+      </button>
+      {error && (
+        <p role="alert" className="notice notice-error export-error">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
 /** First-run guidance, shown until the user owns a document (DOC-014). Points at the page's
  * own buttons rather than duplicating them. */
 function Onboarding() {
@@ -444,6 +486,7 @@ export function DocumentList() {
           <button type="button" onClick={() => setImportOpen(true)}>
             Import file
           </button>
+          {ownsAny && <ExportAllButton />}
           <button type="button" className="primary" onClick={() => setNewOpen(true)}>
             New document
           </button>

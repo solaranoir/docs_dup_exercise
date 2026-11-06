@@ -401,3 +401,37 @@ kbd {
 .template-preview li { display: grid; gap: 1px; }
 .template-preview li span { color: var(--muted); font-size: 0.85rem; }
 @media (max-width: 640px) { .new-doc-body { grid-template-columns: minmax(0, 1fr); } }
+
+/* Export (ADR-012) */
+.export-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.export-option { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; display: grid; gap: 8px; align-content: start; }
+.export-option h3 { margin: 0; font-size: 1.05rem; }
+.export-option .hint { margin: 0; }
+.export-option button { justify-self: start; }
+.export-error { flex-basis: 100%; margin: 4px 0 0; }
+@media (max-width: 640px) { .export-options { grid-template-columns: minmax(0, 1fr); } }
+
+/* Print / Save as PDF (DOC-029): just the title and the document, dark text on white. */
+@media print {
+  @page { margin: 18mm 16mm; }
+  :root { color-scheme: light; }
+  html, body { background: #fff !important; color: #111 !important; }
+  .skip-link, .app-header, .editor-head, .organize, .toolbar, .keyboard-help, .attachments,
+  .notice, [role="alert"], .modal, #editor-keyboard-hint { display: none !important; }
+  main, .editor-page { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  .title-input {
+    display: block; width: 100%; border: 0 !important; background: none !important; padding: 0 0 8pt;
+    color: #111 !important; font: 700 22pt Georgia, "Times New Roman", serif; box-shadow: none;
+  }
+  .editor { background: none !important; border: 0 !important; box-shadow: none !important; }
+  .editor-body {
+    min-height: 0 !important; padding: 0 !important; color: #111 !important; background: none !important;
+    font-size: 11pt; line-height: 1.5;
+  }
+  .editor-body h1, .editor-body h2, .editor-body h3 {
+    font-family: Georgia, "Times New Roman", serif; color: #111 !important;
+    break-after: avoid; page-break-after: avoid;
+  }
+  .editor-body p, .editor-body li { orphans: 3; widows: 3; }
+  .editor-body li { break-inside: avoid; }
+}

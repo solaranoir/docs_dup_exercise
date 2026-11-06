@@ -2,6 +2,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type DocumentFull } from "../api";
 import { AttachmentsPanel } from "../components/AttachmentsPanel";
+import { ExportDialog } from "../components/ExportDialog";
 import { ImportDialog } from "../components/ImportDialog";
 import { KeyboardHelp } from "../components/KeyboardHelp";
 import { OrganizePanel } from "../components/OrganizePanel";
@@ -50,6 +51,7 @@ function DocumentEditor({
   const [busy, setBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [title, setTitle] = useState(initial.title);
   useDocumentTitle(title || "Untitled document");
   const [revision, setRevision] = useState(initial.revision);
@@ -176,6 +178,9 @@ function DocumentEditor({
         <button type="button" onClick={() => void duplicate()} disabled={busy || dirty} title={saveFirst}>
           Duplicate
         </button>
+        <button type="button" onClick={() => setExportOpen(true)}>
+          Export…
+        </button>
         {isOwner && !archived && (
           <button type="button" onClick={() => void setArchived(true)} disabled={busy || dirty} title={saveFirst}>
             Archive
@@ -262,6 +267,13 @@ function DocumentEditor({
           }}
         />
       )}
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        documentId={initial.id}
+        title={title}
+        dirty={dirty && !readOnly}
+      />
       {isOwner && (
         <ShareDialog
           open={shareOpen}

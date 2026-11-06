@@ -34,6 +34,7 @@ CASES = [
     Case("POST", "/api/documents/{doc_id}/restore", (200, 403, 404, 401)),
     # Any reader may copy into a document they own; the source is untouched.
     Case("POST", "/api/documents/{doc_id}/duplicate", (201, 201, 404, 401)),
+    Case("GET", "/api/documents/{doc_id}/export", (200, 200, 404, 401)),
     # Personal organisation (ADR-010): any reader files/tags in their own view only.
     Case("PUT", "/api/documents/{doc_id}/folder", (200, 200, 404, 401), "json-folder"),
     Case("PUT", "/api/documents/{doc_id}/tags", (200, 200, 404, 401), "json-tags"),

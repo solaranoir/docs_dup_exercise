@@ -16,6 +16,7 @@ from app.routes import (
     attachments,
     demo,
     documents,
+    export,
     grants,
     health,
     imports,
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(grants.router)
     app.include_router(organize.router)
     app.include_router(templates.router)
+    app.include_router(export.router)
     return app
 
 
