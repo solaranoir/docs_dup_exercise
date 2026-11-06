@@ -1,13 +1,14 @@
 # Solara Docs
 
 Technical notes, field logs and experiments for [Solara Radio](https://solararadio.netlify.app).
-A private, invite-only document workspace: write formatted documents, import `.txt` / `.md` /
-`.docx`, attach files, and share documents read-only with other members by email.
+A private, invite-only document workspace: write formatted documents, start from radio and
+engineering templates, attach files, organise with folders and tags, export, and share documents
+read-only with other members by email.
 
 **Live:** https://docworkspace-web.onrender.com · reached from Solara Radio → Tools, and links
 back there from every page.
 
-_README updated 2026-11-04._ The previous MVP README is archived in
+**Version 1.0.0** ([changelog](CHANGELOG.md)). The previous MVP README is archived in
 [History and archive](#history-and-archive).
 
 ## What it does
@@ -17,6 +18,11 @@ _README updated 2026-11-04._ The previous MVP README is archived in
 - **Write.** Rich-text editor with headings, bold/italic/underline, lists and four text sizes.
   Saving is explicit (Save button or Ctrl/⌘+S), with an unsaved-changes indicator, a warning
   before leaving, and conflict detection if the document changed in another tab.
+- **Start from a template:** POTA Activation Plan, Satellite Observation Log, Antenna Experiment,
+  or Research/Engineering Notes, each titled with today's date. Or start blank.
+- **Find** documents by searching titles and content, sort them, see what you opened recently,
+  and keep them in your own **folders and tags** (only you see them, even on shared documents).
+  Duplicate, archive and restore.
 - **Import** `.txt`, `.md` and `.docx` as a new document, or append/replace into an existing one.
   A preview lists anything the import cannot keep (tables, images, colours…) before saving.
 - **Attach** `.txt`, `.md` and `.docx` files to a document (10 MB each, up to 10 per
@@ -42,14 +48,15 @@ backend/        FastAPI app (app/), Alembic migrations, tests, scripts/
 frontend/       React + Tiptap single-page app
 e2e/            Playwright journeys
 docs/           Roadmap, runbook, security audit, readiness gates, ADRs, archive
-scripts/        smoke_deployed.sh (post-deploy verification)
+scripts/        smoke_deployed.sh (post-deploy verification; also run by a GitHub Action)
 render.yaml     Render Blueprint
 ```
 
 Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [docs/adr/](docs/adr/) (ADR-001 …
-ADR-009; authentication is [ADR-009](docs/adr/0009-oauth-allowlist-authentication.md)) ·
+ADR-012; authentication is [ADR-009](docs/adr/0009-oauth-allowlist-authentication.md)) ·
 Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md) · Operations: [docs/RUNBOOK.md](docs/RUNBOOK.md) ·
-Release gates: [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) · Security audit:
+Release gates: [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) · Release steps:
+[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) · Security audit:
 [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md)
 
 ## Run it locally
@@ -132,17 +139,25 @@ python scripts/allow_email.py remove someone@example.com   # revoke and end thei
 python scripts/allow_email.py list
 ```
 
-Deploys come from `main` through `render.yaml`. Migrations run before the API starts. After a
-deploy, run `scripts/smoke_deployed.sh "" "" <commit>`; set `SMOKE_SESSION` to a session cookie
-value to include the signed-in journey.
+Deploys come from `main` through `render.yaml`. Migrations run in a pre-deploy step
+(`scripts/migrate.py`), so a failed migration leaves the previous version serving. After each
+deploy the **Post-deploy smoke** GitHub Action waits for the new commit to be live and checks the
+public site; it also runs daily. At release, also run `scripts/smoke_deployed.sh` with
+`SMOKE_SESSION` set to a session cookie value for the signed-in journey. Other maintenance
+scripts: `purge_trash.py` (Trash older than 30 days; also runs automatically) and
+`sweep_orphans.py` (stored files no attachment points at). All are dry runs unless given `--yes`.
 
 ## Limitations and what's next
 
 No real-time collaboration, comments, version history, public links, editor (write) grants or
-autosave yet. Imports are best-effort, attachments are not virus-scanned
-([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)), and rate limits are
-per-instance. The remaining roadmap phases (document organisation, search, export, deletion and
-recovery, revision history) are in [docs/ROADMAP.md](docs/ROADMAP.md).
+autosave ([#27](https://github.com/solaranoir/docs_dup_exercise/issues/27)) yet. Imports are
+best-effort. Attachments are limited to `.txt`, `.md` and `.docx` (more types:
+[#55](https://github.com/solaranoir/docs_dup_exercise/issues/55)) and are not virus-scanned, an
+accepted risk for v1.0 ([#29](https://github.com/solaranoir/docs_dup_exercise/issues/29)).
+Search matches words and word starts, not text inside words
+([#50](https://github.com/solaranoir/docs_dup_exercise/issues/50)). Rate limits are kept in
+memory, which is fine while the API runs as one instance. What comes after v1.0 is in
+[docs/ROADMAP.md](docs/ROADMAP.md) (Future).
 
 ## History and archive
 
@@ -157,6 +172,9 @@ log are in [docs/PLAN.md](docs/PLAN.md). In November 2026 it was turned into Sol
 | 2026-11-04 | Identity schema and invite allowlist; server-side sessions and CSRF origin check; demo sign-in off in production |
 | 2026-11-04 | GitHub and Google sign-in; share by email; cross-user isolation tests; cut-over tooling |
 | 2026-11-04 | Solara look and feel, return link to Solara Radio Tools, onboarding, phone layout |
+| 2026-11-05 | Search, sorting, recent documents, duplicate, archive; personal folders and tags |
+| 2026-11-05 | Templates; Markdown and PDF export, Export all; Trash with 30-day recovery |
+| 2026-11-06 | Release tests, Starter plan, rollback-safe migrations, post-deploy smoke checks; **v1.0.0** |
 
 The original MVP README, with its setup instructions as they were, is preserved at
 [docs/archive/README-mvp.md](docs/archive/README-mvp.md). Superseded decisions remain in

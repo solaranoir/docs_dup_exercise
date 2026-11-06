@@ -141,7 +141,8 @@ delete from R2 are listed (exit code 1) for manual removal. Re-running it is har
 Deleting a document moves it to its owner's Trash. Nobody else can see it there, and the owner
 can restore it with its shares, attachments, folder and tags. After 30 days the API removes it
 and its attachment objects for good. This runs inside the API (no separate cron job to pay for
-or monitor), at most once an hour per instance, after someone loads My Documents or their Trash. To check or run it by hand:
+or monitor), at most once an hour per instance, after someone loads My Documents or their
+Trash. To check or run it by hand:
 
 ```bash
 # Render → docworkspace-api → Shell
@@ -150,8 +151,60 @@ python scripts/purge_trash.py --yes    # remove everything past 30 days now
 ```
 
 A document can't be recovered after it's removed (or after its owner chooses *Delete forever*),
-except from a database backup. If the script reports attachment objects it could not delete,
-they are orphans in R2 and safe to remove there.
+except from a database backup, and then without its attachments (below). If the script reports
+attachment objects it could not delete, `sweep_orphans.py` removes them later.
+
+## Attachment storage, retention and recovery (audit A12, A13)
+
+Attachment bytes live only in the private R2 bucket, under
+`documents/<document id>/attachments/<attachment id>`. Keys never contain user input, and an
+upload never overwrites an existing object.
+
+- **No object versioning.** R2 does not keep earlier versions, and none are needed: objects are
+  write-once. Recovery from mistakes is the Trash (30 days). Users can keep their own copies with
+  **Export all**.
+- **No lifecycle rule.** Objects are deleted by the app when their attachment or document is
+  deleted for good. Don't add an R2 lifecycle rule that expires objects: it would break live
+  attachments.
+- **Database restores don't bring attachments back.** Restoring the database to an earlier point
+  brings back attachment rows whose objects may already be gone. Downloading one then returns
+  503 "Attachments are temporarily unavailable", and Export all lists it under "Attachments that
+  could not be included". Say so when restoring for a user.
+- **Orphans** are objects no attachment row points at: an R2 delete failed (logged as
+  `orphaned attachment object…`), or an upload stored its bytes and then its database
+  write failed. They hold bytes a user deleted, so sweep them monthly, or after any R2 incident:
+
+```bash
+# Render → docworkspace-api → Shell
+python scripts/sweep_orphans.py          # dry run: lists orphaned objects
+python scripts/sweep_orphans.py --yes    # deletes them
+```
+
+Objects younger than an hour are skipped, because an upload may still be committing.
+
+## Restore drill (DOC-007)
+
+Do this once before v1.0 and after any change to the database plan. It proves backups exist and
+can be read by this version of the app. It takes about 20 minutes and briefly bills a second
+database.
+
+1. Render → `docworkspace-db` → **Recovery** → restore to a recent point in time. Render creates a
+   **new** database from it; the live database is untouched. Name it `docworkspace-restore-drill`.
+2. When it's available, copy its **External Database URL** (Connect → External) and allow your IP
+   under its Access Control if needed.
+3. From a clone, in `backend/` with the venv active:
+   ```bash
+   DATABASE_URL='<external URL>' alembic current        # expect the latest revision, e.g. 0006 (head)
+   psql '<external URL>' -c "select count(*) from documents;"
+   psql '<external URL>' -c "select title, updated_at from documents order by updated_at desc limit 5;"
+   ```
+   The counts and latest titles should match what you expect from just before the restore point.
+4. Delete `docworkspace-restore-drill` in Render so it stops billing.
+5. Tick the restore-drill gate in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) with the
+   date and the restore point.
+
+Never point the API at a restored database without deciding what happens to changes made since
+the restore point; that is a data-loss decision for the owner.
 
 ## Smoke test against production
 

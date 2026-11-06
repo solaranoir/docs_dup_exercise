@@ -42,7 +42,7 @@ Replace; 10 MB/file, 10 attachments/doc; `.txt`, `.md`, `.docx` only.
 ## Status (end of Week 4)
 
 Weeks 1–3 merged (#24, #25, #28) and deployed; Week 4 in the hardening PR. Remaining user task:
-#21 clean-room walkthrough + release sign-off ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)).
+#21 clean-room walkthrough + release sign-off ([archive/RELEASE_CHECKLIST-mvp.md](archive/RELEASE_CHECKLIST-mvp.md)).
 
 ## P0 requirement → automated evidence
 

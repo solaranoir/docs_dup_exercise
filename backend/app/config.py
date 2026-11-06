@@ -93,8 +93,10 @@ class Settings(BaseSettings):
     def check_production(self) -> None:
         if not self.is_production:
             return
-        if self.session_secret.startswith("dev-only"):
-            raise RuntimeError("SESSION_SECRET must be set in production")
+        secret = self.session_secret
+        if secret.startswith("dev-only") or "change-me" in secret or len(secret) < 32:
+            # The default, the .env.example placeholder, or too short to be random.
+            raise RuntimeError("SESSION_SECRET must be set to a long random value in production")
         if self.enable_demo_auth:
             raise RuntimeError("ENABLE_DEMO_AUTH must not be set in production")
         if not self.cors_origins or any(not o.startswith("https://") for o in self.cors_origins):
