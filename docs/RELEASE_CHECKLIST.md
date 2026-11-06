@@ -33,7 +33,9 @@ release itself. Tick each box with the date. The MVP checklist is archived at
 - [ ] Keyboard-only pass: skip link, toolbar (Tab in, arrow keys between controls), dialogs (Esc
       closes, focus returns), visible focus everywhere.
 - [ ] The Solara Radio Tools Library (https://solararadio.netlify.app/tools) lists Solara Docs and
-      links to https://docworkspace-web.onrender.com. That entry lives in the Solara Radio site.
+      links to https://docworkspace-web.onrender.com. The entry is in the solara-radio repo
+      (`CodingProjectsWidget.jsx`, `SolaraDocsWidget.jsx`; solara-radio#2). Optional: refresh its
+      description there for v1.0 (templates, folders and tags, search, export, Trash).
 
 ## 4. Cut over to real users
 
