@@ -43,10 +43,17 @@ jobs:
           ruff format --check .
       - name: Typecheck
         run: mypy
-      - name: Migrate + seed twice (idempotency on PostgreSQL)
+      - name: Migrate (the Render pre-deploy command) + seed twice (idempotency on PostgreSQL)
         run: |
-          alembic upgrade head
+          python scripts/migrate.py
           python scripts/seed_demo.py
+          python scripts/seed_demo.py
+      - name: Migrations roll back (one step, then all the way, with data)
+        run: |
+          alembic downgrade -1
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
           python scripts/seed_demo.py
       - name: Boot smoke test
         run: |

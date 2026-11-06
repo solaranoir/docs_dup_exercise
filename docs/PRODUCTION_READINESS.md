@@ -41,13 +41,38 @@ upgrade.
       document journey with `SMOKE_SESSION` (2026-11-05)
 - [ ] `SMOKE_SESSION=… scripts/smoke_deployed.sh` → "All checks passed" on the release commit
 - [ ] Rollback rehearsed: redeploy the previous commit, and migrations stay backward-compatible for one release
+      (rule and steps: RUNBOOK → Rollback and migrations; downgrade/upgrade checked in CI)
+- [ ] API on the Starter plan in the Render dashboard (matches `render.yaml`), and the first
+      **Post-deploy smoke** run on `main` is green
 
 ## P1 — before v1.0
 
 - [ ] A11 Shared rate-limit store, if the API ever runs more than one instance
 - [ ] A12 Orphaned R2 object sweep
 - [ ] A13 R2 object versioning or lifecycle policy documented in the RUNBOOK
-- [ ] Virus scanning for uploads (#29)
+- [x] Virus scanning for uploads (#29): **deferred, risk accepted for v1.0** (below)
+
+## Accepted risk: no virus scanning of uploads (#29)
+
+Decision (2026-11-05, owner): ship v1.0 without malware scanning and revisit it with #55
+(more attachment types), since binary formats raise the risk.
+
+**Why it is acceptable now**
+- Only `.txt`, `.md` and `.docx` are accepted. Contents are checked against the type: text must be
+  UTF-8 with no NUL bytes, a `.docx` must be a real Word package (macro-enabled `.docm` is refused),
+  and zip bombs are refused. Everything else gets a 415 (`tests/test_upload_security.py`).
+- Downloads are never rendered by the browser: `Content-Disposition: attachment`, the stored type
+  (`text/plain` for text), `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`.
+- Files are private: the R2 bucket has no public URL, and a file is only served after checking
+  that the requester can read its document (`tests/test_isolation.py`).
+- Users are invited (allowlist), and sharing is read-only by email, so a file reaches only people
+  the uploader chose.
+
+**Remaining risk:** an invited user could share a malicious `.docx` (for example one exploiting a
+Word vulnerability) with someone else. It would open in their desktop Word, not in Solara Docs.
+
+**Revisit when:** any binary type (images, PDF) is accepted (#55), sharing goes beyond
+invited users, or the number of users grows past a small trusted group.
 
 ## Sign-off
 

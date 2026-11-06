@@ -29,7 +29,7 @@ expect() { # expect <label> <expected> <actual>
 code() { curl -s -m 60 -o /dev/null -w '%{http_code}' "$@"; }
 json() { python3 -c "import sys, json; print(json.load(sys.stdin)$1)"; }
 
-echo "Warming API (free tier may take ~50 s)…"
+echo "Warming API…"
 curl -s -m 120 -o /dev/null "$API/health/live" || true
 
 echo "Health"
@@ -46,9 +46,14 @@ expect "storage" ok "$(echo "$ready" | json '.get("storage")')"
 expect "static site /" 200 "$(code "$WEB/")"
 expect "deep link /doc/:id serves the app" 200 "$(code "$WEB/doc/00000000-0000-0000-0000-000000000000")"
 expect "unknown /api path still reaches the API" 404 "$(code "$WEB/api/no-such-route")"
+headers="$(curl -s -m 60 -D - -o /dev/null "$WEB/" | tr -d '\r' | tr 'A-Z' 'a-z')"
+grep -q "^content-security-policy: default-src 'self'" <<<"$headers" && pass "CSP header" || fail "CSP header missing"
+grep -q '^x-frame-options: deny' <<<"$headers" && pass "X-Frame-Options DENY" || fail "X-Frame-Options missing"
 
 echo "Security (via $WEB/api)"
 expect "anonymous /api/me" 401 "$(code "$WEB/api/me")"
+expect "anonymous export all" 401 "$(code "$WEB/api/export")"
+expect "anonymous Trash" 401 "$(code "$WEB/api/trash")"
 expect "anonymous write, same origin" 401 "$(code -X POST -H "Origin: $WEB" \
   -H 'content-type: application/json' -d '{}' "$WEB/api/documents")"
 expect "cross-site write blocked" 403 "$(code -X POST -H 'Origin: https://evil.example' \
@@ -83,6 +88,7 @@ else
 fi
 
 echo "Documents + import"
+expect "templates listed" 200 "$(code "${A[@]}" "$WEB/api/templates")"
 expect "import preview (.docx)" 200 "$(code "${A[@]}" -F "file=@$FIXTURES/sample.docx" "$WEB/api/imports")"
 doc="$(curl -s "${A[@]}" -H 'content-type: application/json' \
   -d '{"title":"Smoke test - safe to delete"}' "$WEB/api/documents" | json '["id"]')"
@@ -96,6 +102,8 @@ echo "Attachments (object storage)"
 att="$(curl -s "${A[@]}" -F "file=@$FIXTURES/sample.txt" "$WEB/api/documents/$doc/attachments" | json '["id"]')"
 curl -s "${A[@]}" -o "$TMP/download" "$WEB/api/documents/$doc/attachments/$att"
 cmp -s "$TMP/download" "$FIXTURES/sample.txt" && pass "download is byte-identical" || fail "download differs"
+curl -s "${A[@]}" -o "$TMP/export.zip" "$WEB/api/documents/$doc/export"
+[[ "$(head -c 2 "$TMP/export.zip")" == PK ]] && pass "Markdown export (.zip with attachment)" || fail "export is not a zip"
 
 if [[ "$MODE" == demo ]]; then
 echo "Sharing"
@@ -115,7 +123,9 @@ printf 'MZ' > "$TMP/x.exe"
 expect "unsupported type" 415 "$(code "${A[@]}" -F "file=@$TMP/x.exe" "$WEB/api/imports")"
 
 echo "Cleanup"
-expect "delete document (and its object)" 204 "$(code "${A[@]}" -X DELETE "$WEB/api/documents/$doc")"
+# Delete moves it to the Trash (ADR-012); delete it from there too so no smoke data is left behind.
+expect "move document to Trash" 204 "$(code "${A[@]}" -X DELETE "$WEB/api/documents/$doc")"
+expect "delete for good (and its object)" 204 "$(code "${A[@]}" -X DELETE "$WEB/api/trash/$doc")"
 
 if (( FAILURES )); then echo "$FAILURES check(s) failed"; exit 1; fi
 echo "All checks passed"

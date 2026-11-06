@@ -11,15 +11,19 @@ services:
   - type: web
     name: docworkspace-api
     runtime: python
-    plan: free # sleeps when idle; first request after sleep is slow
+    # Starter (Phase 6 decision): no sleeping, so no 30–50 s cold start, and pre-deploy commands.
+    # Upgrade in the dashboard too; this keeps a Blueprint sync from reverting it.
+    plan: starter
     rootDir: backend
     # Non-editable install: an editable install once kept serving stale code after a
     # "successful" deploy (#30). /health/live reports the served commit.
     buildCommand: pip install -r requirements.lock && pip install --no-deps .
-    # Migrations run before the server binds (free web plans have no preDeployCommand).
-    # No demo seed: demo auth is disabled in production (ADR-009).
+    # Migrations run once per deploy, before the new instance starts. If one fails the deploy
+    # fails and the previous version keeps serving. scripts/migrate.py is `alembic upgrade head`
+    # that also lets a rollback deploy older code onto a newer schema (RUNBOOK → Rollback and
+    # migrations). No demo seed: demo auth is disabled in production (ADR-009).
+    preDeployCommand: python scripts/migrate.py
     startCommand: >-
-      alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
     healthCheckPath: /health/ready
     envVars:
