@@ -1,6 +1,7 @@
 """Attachment byte storage. Bytes live only in object storage, never on the service disk."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any, Protocol
 
@@ -21,6 +22,9 @@ class Storage(Protocol):
     def get(self, key: str) -> bytes: ...
     def delete(self, key: str) -> None: ...
     def check(self) -> None: ...
+    def list(self, prefix: str) -> Iterator[tuple[str, datetime]]:
+        """Every object key under ``prefix`` with its last-modified time (orphan sweep)."""
+        ...
 
 
 class S3Storage:
@@ -91,6 +95,18 @@ class S3Storage:
     def delete(self, key: str) -> None:
         self._call(self.client.delete_object, Key=key)
 
+    def list(self, prefix: str) -> Iterator[tuple[str, datetime]]:
+        self._ensure_bucket()
+        try:
+            pages = self.client.get_paginator("list_objects_v2").paginate(
+                Bucket=self.bucket, Prefix=prefix
+            )
+            for page in pages:
+                for obj in page.get("Contents", []):
+                    yield obj["Key"], obj["LastModified"]
+        except (BotoCoreError, ClientError) as exc:
+            raise StorageError(type(exc).__name__) from exc
+
     def check(self) -> None:
         try:
             self._ensure_bucket()
@@ -104,9 +120,11 @@ class MemoryStorage:
 
     def __init__(self) -> None:
         self.objects: dict[str, tuple[bytes, str]] = {}
+        self.modified: dict[str, datetime] = {}
 
     def put(self, key: str, data: bytes, content_type: str) -> None:
         self.objects[key] = (data, content_type)
+        self.modified[key] = datetime.now(UTC)
 
     def get(self, key: str) -> bytes:
         if key not in self.objects:
@@ -115,6 +133,12 @@ class MemoryStorage:
 
     def delete(self, key: str) -> None:
         self.objects.pop(key, None)
+        self.modified.pop(key, None)
+
+    def list(self, prefix: str) -> Iterator[tuple[str, datetime]]:
+        for key in sorted(self.objects):
+            if key.startswith(prefix):
+                yield key, self.modified.get(key, datetime.now(UTC))
 
     def check(self) -> None:
         return None

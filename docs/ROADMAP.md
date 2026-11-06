@@ -19,11 +19,11 @@ repository keeps its name. The MVP delivery history is in [PLAN.md](PLAN.md).
 
 ## Releases
 
-| Release | Phases | Exit condition |
-| --- | --- | --- |
-| v0.5 Secure Solara Preview | 1 Security, 2 Solara UI | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) P0 gates pass |
-| v1.0 Solara Docs | 3 Organization, 4 Templates, 5 Export, 6 QA | A new user creates a doc from a template, edits, attaches, organizes, exports and retrieves it; another user cannot read it without permission |
-| v2.0 Connected workspace | Tool-to-document, cloud export | Validated demand |
+| Release | Phases | Exit condition | Status |
+| --- | --- | --- | --- |
+| v0.5 Secure Solara Preview | 1 Security, 2 Solara UI | [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) P0 gates pass | Folded into v1.0 |
+| v1.0 Solara Docs | 3 Organization, 4 Templates, 5 Export, 6 QA | A new user creates a doc from a template, edits, attaches, organizes, exports and retrieves it; another user cannot read it without permission | Built; release steps in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
+| v2.0 Connected workspace | Tool-to-document, cloud export | Validated demand | Not started |
 
 ## Pull request sequence
 

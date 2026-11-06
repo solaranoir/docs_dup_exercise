@@ -223,6 +223,8 @@ def test_production_settings_are_safe() -> None:
         ({"cors_origins": ["http://localhost:5173"]}, "CORS_ORIGINS"),
         ({"cors_origins": []}, "CORS_ORIGINS"),
         ({"session_secret": "dev-only-insecure-secret-change-me"}, "SESSION_SECRET"),
+        ({"session_secret": "change-me-to-a-long-random-string"}, "SESSION_SECRET"),  # .env.example
+        ({"session_secret": "short-but-not-a-placeholder"}, "SESSION_SECRET"),
     ],
 )
 def test_production_refuses_unsafe_config(overrides: dict[str, object], message: str) -> None:
